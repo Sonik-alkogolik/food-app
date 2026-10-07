@@ -1,0 +1,5 @@
+/* Глобальные стили приложения (ШАГ 28) */
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #fafafa; color: #222; }
+img[lazy=loading] { opacity: .5; }
+a { color: inherit; }

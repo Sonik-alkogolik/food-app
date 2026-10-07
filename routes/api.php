@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ImageUploadController;
 use App\Http\Controllers\Api\IngredientController;
 use App\Http\Controllers\Api\RecipeController;
 use App\Http\Controllers\Api\RecipeDetailController;
+use App\Http\Controllers\Api\RandomRecipeController;
 use App\Http\Controllers\Api\SearchController;
 use Illuminate\Support\Facades\Route;
 
@@ -22,6 +23,7 @@ Route::get('/recipes/{slug}', [RecipeDetailController::class, 'show'])          
 Route::get('/recipes/{id}/steps', [RecipeDetailController::class, 'steps'])       // шаги приготовления рецепта
     ->whereNumber('id');
 Route::get('/search', SearchController::class);                                   // поиск по названию и ингредиентам
+Route::get('/random', RandomRecipeController::class);                                      // случайный рецепт
 Route::post('/upload/image', [ImageUploadController::class, 'upload']);           // загрузка изображения (админ)
 
 // «Холодильник» — подбор рецептов по имеющимся продуктам
