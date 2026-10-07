@@ -26,7 +26,7 @@ class FridgeMatcher
 
         $recipes = Recipe::query()
             ->where('is_active', true)
-            ->with(['category', 'ingredients'])
+            ->with(['category', 'ingredientsRelation'])
             ->get();
 
         return $recipes
