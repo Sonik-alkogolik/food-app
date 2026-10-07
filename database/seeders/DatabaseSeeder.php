@@ -2,30 +2,22 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
+/**
+ * ШАГ 17: порядок наполнения базы данных:
+ * 1) категории -> 2) 1000 рецептов -> 3) шаги -> 4) URL изображений.
+ */
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
         $this->call([
-            CategorySeeder::class,
-            RecipeSeeder::class,
-            IngredientSeeder::class,
-        ]);
-
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+            CategorySeeder::class,   // ШАГ 14
+            BulkRecipeSeeder::class, // ШАГ 15 (~1000 рецептов)
+            RecipeStepSeeder::class, // ШАГ 16 (3–8 шагов с фото на рецепт)
+            ImageUrlSeeder::class,   // ШАГ 38 (placeholder-изображения)
+            IngredientSeeder::class, // «Холодильник»: структурированные ингредиенты
         ]);
     }
 }
