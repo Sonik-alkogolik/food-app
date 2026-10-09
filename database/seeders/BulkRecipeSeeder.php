@@ -20,7 +20,8 @@ use Illuminate\Support\Facades\DB;
 class BulkRecipeSeeder extends Seeder
 {
     private const TARGET_COUNT = 1000;
-    private const CHUNK_SIZE   = 100;
+    // 50 вместо 100: пакеты INSERT с TEXT-полями реже упираются в max_allowed_packet MySQL
+    private const CHUNK_SIZE   = 50;
 
     /**
      * Прилагательные-вариации. Полный пул (9 штук по плану ШАГ 15):
@@ -54,6 +55,12 @@ class BulkRecipeSeeder extends Seeder
 
         // slug категории -> id
         $categoryIds = Category::pluck('id', 'slug')->toArray();
+        if (!$categoryIds) {
+            throw new \RuntimeException(
+                'Таблица categories пуста. Сначала выполните миграции и посейте категории: '
+                . 'php artisan migrate --seed или php artisan db:seed --class=CategorySeeder'
+            );
+        }
 
         // Детерминированный генератор — одинаковый результат при любом перезапуске
         mt_srand(20261007);
