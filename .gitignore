@@ -1,1 +1,7 @@
-*.bundle
+node_modules/
+dist/
+build/
+public/frontend/assets/
+public/frontend/.vite/
+*.pyc
+__pycache__/
