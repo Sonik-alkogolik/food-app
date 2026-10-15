@@ -5,3 +5,16 @@ public/frontend/assets/
 public/frontend/.vite/
 *.pyc
 __pycache__/
+*.bundle
+/public/frontend
+/storage/*.key
+/vendor
+.env
+.env.backup
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+/.idea
+/.vscode
