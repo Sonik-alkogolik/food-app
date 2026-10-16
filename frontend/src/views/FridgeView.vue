@@ -3,6 +3,9 @@
     <h1>🧊 Мой холодильник</h1>
     <p class="hint">Добавьте ингредиенты, которые у вас есть — мы подберём блюда, которые можно приготовить.</p>
 
+    <!-- 3D модель холодильника -->
+    <Fridge3D />
+
     <form class="add-form" @submit.prevent="onAdd">
       <input
         v-model="newItem"
@@ -73,6 +76,31 @@
     </div>
   </div>
 </template>
+
+<script setup>
+import { onMounted, ref } from 'vue'
+import { useFridgeStore } from '../stores/fridge'
+import Fridge3D from '../components/Fridge3D.vue'
+
+const store = useFridgeStore()
+const newItem = ref('')
+const selected = ref(null)
+
+const isHave = (name) => store.items.includes(name.toLowerCase())
+
+function onAdd() {
+  if (store.addItem(newItem.value)) newItem.value = ''
+}
+
+function openRecipe(recipe) {
+  selected.value = recipe
+}
+
+onMounted(() => {
+  store.fetchIngredients()
+  if (store.items.length) store.search()
+})
+</script>
 
 <script setup>
 import { onMounted, ref } from 'vue'
