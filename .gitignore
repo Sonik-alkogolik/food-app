@@ -3,8 +3,7 @@ node_modules/
 vendor/
 
 # Build artifacts / Generated files
-public/frontend/assets/
-public/frontend/.vite/
+public/frontend/
 public/build/
 dist/
 
@@ -20,6 +19,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+
+# Test / tool caches
+.phpunit.result.cache
+.phpunit.cache/
 
 # Editor directories and files
 .vscode/*

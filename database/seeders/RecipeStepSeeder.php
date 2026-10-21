@@ -45,7 +45,7 @@ class RecipeStepSeeder extends Seeder
                     $totalSteps++;
 
                     if (count($buffer) >= self::CHUNK_SIZE) {
-                        DB::table('recipe_steps')->insert($buffer);
+                        $this->flush($buffer);
                         $buffer = [];
                     }
                 }
@@ -53,10 +53,26 @@ class RecipeStepSeeder extends Seeder
         });
 
         if ($buffer !== []) {
-            DB::table('recipe_steps')->insert($buffer);
+            $this->flush($buffer);
         }
 
         $this->command?->info("RecipeStepSeeder: создано {$totalSteps} шагов.");
+    }
+
+    /**
+     * Записывает пачку шагов.
+     *
+     * upsert по (recipe_id, step_number) вместо insert: сидер идемпотентен,
+     * повторный запуск обновляет существующие шаги, а не падает на
+     * уникальном индексе recipe_steps_recipe_id_step_number_unique.
+     */
+    private function flush(array $buffer): void
+    {
+        DB::table('recipe_steps')->upsert(
+            $buffer,
+            ['recipe_id', 'step_number'],
+            ['title', 'description', 'image_url', 'duration_minutes', 'updated_at']
+        );
     }
 
     /**

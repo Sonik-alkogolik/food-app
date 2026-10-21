@@ -6,7 +6,6 @@ use App\Models\Ingredient;
 use App\Models\Recipe;
 use Illuminate\Support\Collection;
 use App\Support\Slug;
-use Illuminate\Support\Str;
 
 class FridgeMatcher
 {
@@ -24,23 +23,34 @@ class FridgeMatcher
             ->unique()
             ->values();
 
+        if ($fridgeSlugs->isEmpty()) {
+            return collect();
+        }
+
+        // Хеш для O(1)-проверки «есть ли этот ингредиент в холодильнике».
+        $fridgeSet = array_fill_keys($fridgeSlugs->all(), true);
+
+        // Отбираем рецепты прямо в БД: берём только те, где есть хотя бы один
+        // совпадающий ингредиент — иначе тянем в память все рецепты целиком.
         $recipes = Recipe::query()
             ->where('is_active', true)
-            ->with(['category', 'ingredientsRelation'])
+            ->with(['category:id,name,slug', 'ingredientsRelation'])
+            ->whereHas('ingredientsRelation', fn ($q) => $q->whereIn('ingredients.slug', $fridgeSlugs))
             ->get();
 
         return $recipes
-            ->map(function (Recipe $recipe) use ($fridgeSlugs) {
-                // $recipe->ingredients — атрибут (string), relation — это getRelationValue('ingredients')
-                $needed = $recipe->getRelation('ingredients');
+            ->map(function (Recipe $recipe) use ($fridgeSet) {
+                // Реляция называется ingredientsRelation, т.к. атрибут recipes.ingredients
+                // (TEXT) уже занят человекочитаемым списком.
+                $needed = $recipe->ingredientsRelation;
                 $total = $needed->count();
 
                 if ($total === 0) {
                     return null;
                 }
 
-                $matched = $needed->filter(fn (Ingredient $i) => $fridgeSlugs->contains($i->slug));
-                $missing = $needed->reject(fn (Ingredient $i) => $fridgeSlugs->contains($i->slug));
+                $matched = $needed->filter(fn (Ingredient $i) => isset($fridgeSet[$i->slug]));
+                $missing = $needed->reject(fn (Ingredient $i) => isset($fridgeSet[$i->slug]));
                 $percent = (int) round($matched->count() / $total * 100);
 
                 return [
@@ -50,7 +60,7 @@ class FridgeMatcher
                     'category' => $recipe->category?->name,
                     'cook_time_minutes' => $recipe->cook_time_minutes,
                     'instructions' => $recipe->instructions,
-                    'image_url' => $recipe->image_url,
+                    'main_image_url' => $recipe->main_image_url,
                     'match_percent' => $percent,
                     'can_cook' => $missing->isEmpty(),
                     'matched_ingredients' => $matched->pluck('name')->values(),
@@ -65,8 +75,6 @@ class FridgeMatcher
                 ];
             })
             ->filter()
-            // показываем только те, где совпал хотя бы один ингредиент
-            ->when($fridgeSlugs->isNotEmpty(), fn ($c) => $c->where('match_percent', '>', 0))
             ->sortBy([
                 ['match_percent', 'desc'],
                 ['cook_time_minutes', 'asc'],

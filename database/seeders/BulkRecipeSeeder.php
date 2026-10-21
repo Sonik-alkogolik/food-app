@@ -20,7 +20,8 @@ use Illuminate\Support\Facades\DB;
 class BulkRecipeSeeder extends Seeder
 {
     private const TARGET_COUNT = 1000;
-    private const CHUNK_SIZE   = 100;
+    // 50 вместо 100: пакеты INSERT с TEXT-полями реже упираются в max_allowed_packet MySQL
+    private const CHUNK_SIZE   = 50;
 
     /**
      * Прилагательные-вариации. Полный пул (9 штук по плану ШАГ 15):
@@ -54,6 +55,12 @@ class BulkRecipeSeeder extends Seeder
 
         // slug категории -> id
         $categoryIds = Category::pluck('id', 'slug')->toArray();
+        if (!$categoryIds) {
+            throw new \RuntimeException(
+                'Таблица categories пуста. Сначала выполните миграции и посейте категории: '
+                . 'php artisan migrate --seed или php artisan db:seed --class=CategorySeeder'
+            );
+        }
 
         // Детерминированный генератор — одинаковый результат при любом перезапуске
         mt_srand(20261007);
@@ -62,78 +69,104 @@ class BulkRecipeSeeder extends Seeder
         $rows = [];
         $usedSlugs = [];
 
-        foreach ($catalog as $baseName => $dish) {
-            $categoryId = $categoryIds[$dish['category']] ?? null;
-            if (!$categoryId) {
-                continue; // категория ещё не засеяна — сначала запускайте CategorySeeder
-            }
-
-            $variations = $this->buildVariations($baseName);
-
-            foreach ($variations as $i => $title) {
-                $slug = Slug::make($title);
-                if (isset($usedSlugs[$slug])) {
-                    $slug .= '-' . (++$usedSlugs[$slug]);
-                } else {
-                    $usedSlugs[$slug] = 1;
+        // Собираем рецепты в транзакции: при сбое на середине БД не остаётся
+        // в полузаполненном состоянии (раньше при падении оставались 407 строк).
+        DB::transaction(function () use ($catalog, $categoryIds, $now, &$rows, &$usedSlugs) {
+            foreach ($catalog as $baseName => $dish) {
+                $categoryId = $categoryIds[$dish['category']] ?? null;
+                if (!$categoryId) {
+                    continue; // категория ещё не засеяна — сначала запускайте CategorySeeder
                 }
 
-                [$difficulty, $cookTime, $calories] = $this->tweakDishParams($dish);
+                $variations = $this->buildVariations($baseName);
 
-                $rows[] = [
-                    'category_id'          => $categoryId,
-                    'title'                => $title,
-                    'slug'                 => $slug,
-                    'description'          => $this->buildDescription($title, $dish),
-                    'ingredients'          => $dish['ingredients'],
-                    'instructions'         => $this->numberInstructions($dish['steps']),
-                    'cook_time_minutes'    => $cookTime,
-                    'servings'             => rand(2, 8),
-                    'difficulty'           => $difficulty,
-                    'calories_per_serving' => $calories,
-                    'main_image_url'       => null, // заполнит ImageUrlSeeder (ШАГ 38)
-                    'video_url'            => null,
-                    'is_active'            => true,
-                    'views_count'          => rand(0, 5000),
-                    'favorites_count'      => rand(0, 500),
-                    'created_by'           => self::AUTHORS[array_rand(self::AUTHORS)],
-                    'created_at'           => $now,
-                    'updated_at'           => $now,
-                ];
-            }
-        }
+                foreach ($variations as $i => $title) {
+                    $slug = $this->uniqueSlug($title, $usedSlugs);
 
-        shuffle($rows); // перемешивание детерминировано mt_srand выше
+                    [$difficulty, $cookTime, $calories] = $this->tweakDishParams($dish);
 
-        // Если каталог даёт меньше TARGET_COUNT — дополняем вариациями с автором,
-        // чтобы в базе всегда было ровно 1000 рецептов (гарантия цели ШАГА 15).
-        if (count($rows) < self::TARGET_COUNT) {
-            $needed = self::TARGET_COUNT - count($rows);
-            for ($k = 0; $k < $needed; $k++) {
-                $src = $rows[$k % max(1, count($rows))];
-                $author = self::AUTHORS[$k % count(self::AUTHORS)];
-                $title = $src['title'] . ' от ' . $author;
-                $slug = Slug::make($title);
-                if (isset($usedSlugs[$slug])) {
-                    $slug .= '-' . (++$usedSlugs[$slug]);
-                } else {
-                    $usedSlugs[$slug] = 1;
+                    $rows[] = [
+                        'category_id'          => $categoryId,
+                        'title'                => $title,
+                        'slug'                 => $slug,
+                        'description'          => $this->buildDescription($title, $dish),
+                        'ingredients'          => $dish['ingredients'],
+                        'instructions'         => $this->numberInstructions($dish['steps']),
+                        'cook_time_minutes'    => $cookTime,
+                        'servings'             => rand(2, 8),
+                        'difficulty'           => $difficulty,
+                        'calories_per_serving' => $calories,
+                        'main_image_url'       => null, // заполнит ImageUrlSeeder (ШАГ 38)
+                        'video_url'            => null,
+                        'is_active'            => true,
+                        'views_count'          => rand(0, 5000),
+                        'favorites_count'      => rand(0, 500),
+                        'created_by'           => self::AUTHORS[array_rand(self::AUTHORS)],
+                        'created_at'           => $now,
+                        'updated_at'           => $now,
+                    ];
                 }
-                $src['title'] = $title;
-                $src['slug'] = $slug;
-                $src['created_by'] = $author;
-                $rows[] = $src;
             }
-        }
 
-        $rows = array_slice($rows, 0, self::TARGET_COUNT);
+            shuffle($rows); // перемешивание детерминировано mt_srand выше
 
-        // Пакетная вставка chunk по 100 записей (оптимизация скорости)
-        foreach (array_chunk($rows, self::CHUNK_SIZE) as $chunk) {
-            DB::table('recipes')->insert($chunk);
-        }
+            // Если каталог даёт меньше TARGET_COUNT — дополняем вариациями с автором,
+            // чтобы в базе всегда было ровно 1000 рецептов (гарантия цели ШАГА 15).
+            if (count($rows) < self::TARGET_COUNT) {
+                $needed = self::TARGET_COUNT - count($rows);
+                for ($k = 0; $k < $needed; $k++) {
+                    $src = $rows[$k % max(1, count($rows))];
+                    $author = self::AUTHORS[$k % count(self::AUTHORS)];
+                    $title = $src['title'] . ' от ' . $author;
+                    $src['title'] = $title;
+                    $src['slug'] = $this->uniqueSlug($title, $usedSlugs);
+                    $src['created_by'] = $author;
+                    $rows[] = $src;
+                }
+            }
+
+            $rows = array_slice($rows, 0, self::TARGET_COUNT);
+
+            // Пакетный upsert по slug: сидер идемпотентен — повторный запуск
+            // обновляет существующие рецепты вместо падения на коллизии
+            // уникального индекса и не трогает записи, которых тут нет.
+            foreach (array_chunk($rows, self::CHUNK_SIZE) as $chunk) {
+                DB::table('recipes')->upsert(
+                    $chunk,
+                    ['slug'],
+                    ['category_id', 'title', 'description', 'ingredients', 'instructions',
+                        'cook_time_minutes', 'servings', 'difficulty', 'calories_per_serving',
+                        'video_url', 'is_active', 'views_count', 'favorites_count', 'created_by', 'updated_at']
+                );
+            }
+        });
 
         $this->command?->info('BulkRecipeSeeder: создано ' . count($rows) . ' рецептов.');
+    }
+
+    /**
+     * Генерирует уникальный slug в пределах текущего набора.
+     * Учитывает уже занятые слаги и подбирает свободный суффикс.
+     */
+    private function uniqueSlug(string $title, array &$usedSlugs): string
+    {
+        $base = Slug::make($title);
+        if (!isset($usedSlugs[$base])) {
+            $usedSlugs[$base] = 1;
+            return $base;
+        }
+
+        // Ищем свободный вариант «base-1», «base-2»…
+        $n = $usedSlugs[$base];
+        do {
+            $n++;
+            $candidate = $base . '-' . $n;
+        } while (isset($usedSlugs[$candidate]));
+
+        $usedSlugs[$base] = $n;
+        $usedSlugs[$candidate] = 1;
+
+        return $candidate;
     }
 
     /**

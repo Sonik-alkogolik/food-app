@@ -30,7 +30,7 @@ class FridgeMatchTest extends TestCase
                 ['slug' => \App\Support\Slug::make($name)],
                 ['name' => $name]
             );
-            $recipe->ingredients()->syncWithoutDetaching([$ing->id]);
+            $recipe->ingredientsRelation()->syncWithoutDetaching([$ing->id]);
         }
         return $recipe;
     }

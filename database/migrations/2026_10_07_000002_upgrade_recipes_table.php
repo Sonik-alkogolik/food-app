@@ -25,12 +25,19 @@ return new class extends Migration
             DB::statement('ALTER TABLE recipes RENAME COLUMN image_url TO main_image_url');
         }
 
-        // Индексы для ускорения поиска (ШАГ 40)
+        // Индексы для ускорения поиска (ШАГ 40).
+        // FULLTEXT поддерживают только MySQL/MariaDB — в SQLite (тесты) такой
+        // индекс недоступен, поэтому создаём его только на MySQL-подобных драйверах.
         Schema::table('recipes', function (Blueprint $table) {
             $table->index('category_id', 'recipes_category_id_idx');
             $table->index('is_active', 'recipes_is_active_idx');
-            $table->fullText(['title', 'ingredients'], 'recipes_title_ingredients_fulltext');
         });
+
+        if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+            Schema::table('recipes', function (Blueprint $table) {
+                $table->fullText(['title', 'ingredients'], 'recipes_title_ingredients_fulltext');
+            });
+        }
     }
 
     public function down(): void
@@ -38,8 +45,13 @@ return new class extends Migration
         Schema::table('recipes', function (Blueprint $table) {
             $table->dropIndex('recipes_category_id_idx');
             $table->dropIndex('recipes_is_active_idx');
-            $table->dropFullText('recipes_title_ingredients_fulltext');
         });
+
+        if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+            Schema::table('recipes', function (Blueprint $table) {
+                $table->dropFullText('recipes_title_ingredients_fulltext');
+            });
+        }
 
         if (Schema::hasColumn('recipes', 'main_image_url')) {
             DB::statement('ALTER TABLE recipes RENAME COLUMN main_image_url TO image_url');
