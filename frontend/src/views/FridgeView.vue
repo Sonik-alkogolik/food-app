@@ -106,7 +106,7 @@ onMounted(() => {
 .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; font-family: system-ui, sans-serif; }
 .hint { color: #666; margin-top: -8px; }
 .add-form { display: flex; gap: 10px; margin: 16px 0; }
-.add-form input { flex: 1; padding: 12px 14px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; }
+.add-form input { flex: 1; min-width: 0; padding: 12px 14px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; }
 .add-form input:focus { border-color: #ff9800; outline: none; }
 .add-form button { padding: 12px 22px; background: #ff9800; color: #fff; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; }
 .add-form button:disabled { opacity: .5; cursor: default; }
@@ -136,4 +136,9 @@ onMounted(() => {
 .modal li { padding: 3px 0; }
 .modal li.have { color: #2e7d32; }
 .steps { white-space: pre-wrap; font-family: inherit; line-height: 1.5; background: #fafafa; padding: 12px; border-radius: 8px; }
+@media (max-width: 420px) {
+  .add-form { flex-wrap: wrap; }
+  .add-form input { flex: 1 1 100%; }
+  .add-form button { flex: 1 1 100%; }
+}
 </style>

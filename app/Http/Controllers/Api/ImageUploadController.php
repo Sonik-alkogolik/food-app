@@ -11,6 +11,11 @@ use Illuminate\Support\Str;
  * ШАГ 20: загрузка изображений рецептов (POST /api/upload/image).
  * Валидация: до 5 МБ, jpg/png/webp; уникальное имя; хранение в
  * storage/app/public/recipes/uploads; ответ — публичный путь к файлу.
+ *
+ * Маршрут закрыт middleware'ами auth:sanctum + admin: загрузка
+ * доступна только администраторам (см. EnsureUserIsAdmin).
+ * Публичные файлы раздаются через симлинк public/storage —
+ * создать его нужно командой `php artisan storage:link`.
  */
 class ImageUploadController extends Controller
 {

@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -12,6 +13,21 @@ use Illuminate\Support\Facades\Route;
 | (@unhead/vue) и отдаётся SearchController-страницами при необходимости.
 */
 
-Route::fallback(function () {
+// Страница восстановления пароля. Имя маршрута 'password.reset' обязательно:
+// именно на него ссылается стандартное уведомление Laravel о сбросе пароля,
+// которое мы отправляем пользователю.
+Route::get('/reset-password', function () {
+    return view('spa');
+})->name('password.reset');
+
+Route::fallback(function (Request $request) {
+    // Несуществующий путь в /api — это ошибка API, а не страница сайта.
+    // Без этой проверки клиент получал бы HTML SPA вместо JSON 404.
+    if ($request->is('api/*')) {
+        return response()->json([
+            'message' => 'Метод не найден.',
+        ], 404);
+    }
+
     return view('spa');
 });

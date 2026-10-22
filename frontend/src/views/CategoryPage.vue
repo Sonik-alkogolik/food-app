@@ -14,7 +14,13 @@
 
     <!-- Фильтры только внутри этой категории -->
     <div class="layout">
-      <RecipeFilters :categories="[]" :model-value="localFilters" @apply="apply" @reset="reset" />
+      <RecipeFilters
+        :categories="[]"
+        :model-value="localFilters"
+        :show-category="false"
+        @apply="apply"
+        @reset="reset"
+      />
       <div class="content">
         <div v-if="store.loading" class="loading">Загрузка рецептов…</div>
         <template v-else>
@@ -55,7 +61,12 @@ function fetch(page = 1) {
   store.fetchRecipes(page)
 }
 
-function apply(f) { Object.assign(localFilters, f); fetch(1) }
+function apply(f) {
+  // Копию массива — панель фильтров держит своё состояние и не должна
+  // делить один массив со страницей.
+  Object.assign(localFilters, { ...f, difficulty: [...(f.difficulty || [])] })
+  fetch(1)
+}
 function reset() { Object.assign(localFilters, { category_id: null, difficulty: [], max_time: 180, sort: 'new' }); fetch(1) }
 function go(p) { fetch(p); window.scrollTo({ top: 0, behavior: 'smooth' }) }
 

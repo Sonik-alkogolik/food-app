@@ -1,8 +1,23 @@
 <template>
   <aside class="filters">
     <h3>Фильтры</h3>
+    <p class="hint">Применяются сразу, как только вы что-то изменили.</p>
 
-    <label class="group">
+    <!-- Активные фильтры: видно, что именно применено, и любой можно снять -->
+    <div v-if="chips.length" class="chips">
+      <button
+        v-for="chip in chips"
+        :key="chip.key"
+        type="button"
+        class="chip"
+        :title="`Убрать фильтр «${chip.label}»`"
+        @click="removeChip(chip)"
+      >
+        {{ chip.label }} <span class="x">✕</span>
+      </button>
+    </div>
+
+    <label v-if="showCategory" class="group">
       <span>Категория</span>
       <select v-model.number="local.category_id">
         <option :value="null">Все категории</option>
@@ -33,21 +48,25 @@
     </label>
 
     <div class="btns">
-      <button class="apply" @click="$emit('apply', local)">Применить фильтры</button>
+      <button class="apply" @click="applyNow">Применить фильтры</button>
       <button class="reset" @click="$emit('reset')">Сбросить фильтры</button>
     </div>
   </aside>
 </template>
 
 <script setup>
-/* ШАГ 31: фильтры каталога — категория, сложность (чекбоксы), ползунок времени, сортировка */
-import { reactive, watch } from 'vue'
+/* Фильтры каталога — категория, сложность (чекбоксы), ползунок времени, сортировка.
+   Применяются сразу: раньше выдача менялась только по кнопке «Применить
+   фильтры», и без её нажатия фильтр выглядел неработающим. */
+import { computed, reactive, watch } from 'vue'
 
 const props = defineProps({
   categories: { type: Array, default: () => [] },
   modelValue: { type: Object, required: true },
+  // На странице категории выбор категории не нужен — она уже задана.
+  showCategory: { type: Boolean, default: true },
 })
-defineEmits(['apply', 'reset'])
+const emit = defineEmits(['apply', 'reset'])
 
 const local = reactive({
   category_id: props.modelValue.category_id ?? null,
@@ -56,17 +75,113 @@ const local = reactive({
   sort: props.modelValue.sort || 'new',
 })
 
-watch(() => props.modelValue, (v) => {
-  local.category_id = v.category_id ?? null
-  local.difficulty = [...(v.difficulty || [])]
-  local.max_time = v.max_time ?? 180
-  local.sort = v.sort || 'new'
+/**
+ * Синхронизируем поля по отдельности, а не по объекту modelValue.
+ * Страница может менять фильтры и заменой объекта, и мутацией свойств —
+ * watch на объект во втором случае не срабатывал, и панель фильтров
+ * показывала пустое состояние вместо применённого.
+ */
+watch(() => props.modelValue.category_id, (v) => { local.category_id = v ?? null })
+watch(() => props.modelValue.difficulty, (v) => { local.difficulty = [...(v || [])] }, { deep: true })
+watch(() => props.modelValue.max_time, (v) => { local.max_time = v ?? 180 })
+watch(() => props.modelValue.sort, (v) => { local.sort = v || 'new' })
+
+const DIFFICULTY_LABELS = { easy: 'Легко', medium: 'Средне', hard: 'Сложно' }
+const SORT_LABELS = { new: 'По дате', popular: 'По популярности', time: 'По времени', title: 'По названию' }
+
+/** Снимок состояния — по нему решаем, изменилось ли что-то по-настоящему. */
+function snapshot(state) {
+  return JSON.stringify({
+    category_id: state.category_id ?? null,
+    difficulty: [...(state.difficulty || [])].sort(),
+    max_time: state.max_time ?? 180,
+    sort: state.sort || 'new',
+  })
+}
+
+/** Применённые фильтры — видно, что именно сейчас отсекает выдачу. */
+const chips = computed(() => {
+  const list = []
+
+  if (props.showCategory && local.category_id) {
+    const category = props.categories.find((c) => c.id === local.category_id)
+    list.push({ key: 'category', label: category ? category.name : 'Категория' })
+  }
+
+  for (const value of local.difficulty) {
+    list.push({ key: 'difficulty:' + value, label: DIFFICULTY_LABELS[value] || value })
+  }
+
+  if (local.max_time < 180) {
+    list.push({ key: 'max_time', label: `до ${local.max_time} мин` })
+  }
+
+  if (local.sort && local.sort !== 'new') {
+    list.push({ key: 'sort', label: SORT_LABELS[local.sort] || local.sort })
+  }
+
+  return list
 })
+
+let timer = null
+
+function applyNow() {
+  clearTimeout(timer)
+  emit('apply', {
+    category_id: local.category_id ?? null,
+    difficulty: [...local.difficulty],
+    max_time: local.max_time,
+    sort: local.sort,
+  })
+}
+
+/**
+ * Любое изменение в панели сразу применяется к выдаче.
+ * Ползунок тянут непрерывно, поэтому ждём паузу в 200 мс, а для
+ * остальных элементов хватает того же ожидания.
+ */
+watch(
+  local,
+  () => {
+    clearTimeout(timer)
+
+    // Панель повторяет то, что пришло извне (из адреса страницы или после
+    // сброса) — выдачу трогать не нужно, иначе получится бесконечный цикл.
+    if (snapshot(local) === snapshot(props.modelValue)) return
+
+    timer = setTimeout(applyNow, 200)
+  },
+  { deep: true },
+)
+
+/** Снятие отдельного фильтра из «чипсов». */
+function removeChip(chip) {
+  if (chip.key === 'category') local.category_id = null
+  else if (chip.key === 'max_time') local.max_time = 180
+  else if (chip.key === 'sort') local.sort = 'new'
+  else if (chip.key.startsWith('difficulty:')) {
+    const value = chip.key.slice('difficulty:'.length)
+    local.difficulty = local.difficulty.filter((d) => d !== value)
+  }
+
+  applyNow()
+}
 </script>
 
 <style scoped>
 .filters { background: #fff; border: 1px solid #eee; border-radius: 14px; padding: 16px; position: sticky; top: 80px; }
-.filters h3 { margin: 0 0 12px; }
+.filters h3 { margin: 0 0 6px; }
+.hint { margin: 0 0 12px; font-size: .78rem; color: #888; line-height: 1.35; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid #ffcc80; background: #fff3e0; color: #e65100;
+  border-radius: 999px; padding: 4px 10px; font: inherit; font-size: .78rem;
+  cursor: pointer;
+}
+.chip:hover { background: #ffe7c2; }
+.chip .x { font-weight: 700; opacity: .7; }
+.chip:hover .x { opacity: 1; }
 .group { display: block; margin-bottom: 16px; font-size: .9rem; color: #444; }
 .group > span { display: block; font-weight: 600; margin-bottom: 6px; }
 select, input[type='range'] { width: 100%; }

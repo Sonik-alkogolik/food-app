@@ -24,6 +24,22 @@
       </div>
     </div>
 
+    <section class="section" v-if="videoEmbedUrl">
+      <h2>🎬 Как готовить — видео</h2>
+      <div class="video-wrap">
+        <iframe
+          :src="videoEmbedUrl"
+          :title="`Видео приготовления: ${recipe.title}`"
+          frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen
+        ></iframe>
+      </div>
+      <a class="video-link" :href="recipe.video_url" target="_blank" rel="noopener">
+        Открыть видео на YouTube ↗
+      </a>
+    </section>
+
     <section class="section" v-if="ingredients.length">
       <h2>🧺 Ингредиенты</h2>
       <ul class="ingr">
@@ -60,6 +76,18 @@ const checked = ref([])
 const ingredients = computed(() => props.recipe.ingredients_list || [])
 const diffLabel = computed(() => ({ easy: 'Легко', medium: 'Средне', hard: 'Сложно' }[props.recipe.difficulty] || ''))
 
+/**
+ * Адрес видео для встраивания в плеер.
+ * Источники отдают ссылку в разных видах (watch?v=, /shorts/, /embed/) —
+ * приводим всё к /embed/VIDEO_ID, иначе iframe не покажет ролик.
+ */
+const videoEmbedUrl = computed(() => {
+  const url = (props.recipe?.video_url || '').trim()
+  if (!url) return ''
+  const match = url.match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{6,})/)
+  return match ? `https://www.youtube.com/embed/${match[1]}` : url
+})
+
 watch(() => props.recipe, () => { zoom.value = false; checked.value = [] })
 </script>
 
@@ -76,6 +104,10 @@ watch(() => props.recipe, () => { zoom.value = false; checked.value = [] })
 .facts { list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; color: #444; }
 .easy { color: #16a34a; } .medium { color: #ca8a04; } .hard { color: #dc2626; }
 .section { margin-top: 30px; }
+.video-wrap { position: relative; aspect-ratio: 16/9; border-radius: 14px; overflow: hidden; background: #000; }
+.video-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.video-link { display: inline-block; margin-top: 10px; color: #ff9800; font-weight: 600; text-decoration: none; }
+.video-link:hover { text-decoration: underline; }
 .ingr { list-style: none; padding: 0; columns: 2; }
 .ingr label { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; cursor: pointer; }
 .ingr .done { text-decoration: line-through; color: #aaa; }

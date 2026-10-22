@@ -1,13 +1,22 @@
 <template>
-  <router-link :to="`/recipes/${recipe.slug}`" class="recipe-card">
+  <!-- Корень карточки — <article>, а не ссылка: внутри ссылки нельзя
+       положить кнопку (невалидный HTML), а сердечко нужно именно кнопкой. -->
+  <article class="recipe-card">
     <div class="photo-wrap">
-      <img v-lazy="photoUrl" :alt="recipe.title" class="photo" loading="lazy" @error="onError" />
+      <router-link :to="`/recipes/${recipe.slug}`" class="photo-link" :aria-label="recipe.title">
+        <img v-lazy="photoUrl" :alt="recipe.title" class="photo" loading="lazy" @error="onError" />
+      </router-link>
       <span v-if="recipe.category" class="badge" :style="{ background: categoryColor }">
         {{ recipe.category.name }}
       </span>
+      <div class="fav-slot">
+        <FavoriteButton :recipe="recipe" compact />
+      </div>
     </div>
     <div class="body">
-      <h3 class="title">{{ recipe.title }}</h3>
+      <h3 class="title">
+        <router-link :to="`/recipes/${recipe.slug}`" class="title-link">{{ recipe.title }}</router-link>
+      </h3>
       <div class="meta">
         <span title="Время приготовления">⏱️ {{ recipe.cook_time_minutes }} мин</span>
         <span :class="['diff', recipe.difficulty]" title="Сложность">
@@ -17,12 +26,14 @@
       </div>
       <div class="views" title="Просмотры">👁️ {{ formatViews(recipe.views_count) }}</div>
     </div>
-  </router-link>
+  </article>
 </template>
 
 <script setup>
-/* ШАГ 29: карточка рецепта — фото (lazy), категория, время, сложность, калории, просмотры */
+/* ШАГ 29: карточка рецепта — фото (lazy), категория, время, сложность, калории, просмотры,
+   кнопка избранного. */
 import { computed } from 'vue'
+import FavoriteButton from './FavoriteButton.vue'
 
 const props = defineProps({ recipe: { type: Object, required: true } })
 
@@ -56,10 +67,14 @@ function onError(e) {
 }
 .recipe-card:hover { transform: scale(1.03); box-shadow: 0 10px 28px rgba(0,0,0,.15); }
 .photo-wrap { position: relative; aspect-ratio: 4/3; background: #f3f4f6; }
+.photo-link { position: absolute; inset: 0; display: block; }
 .photo { width: 100%; height: 100%; object-fit: cover; display: block; }
 .badge { position: absolute; top: 10px; left: 10px; color: #fff; padding: 4px 10px; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+.fav-slot { position: absolute; top: 10px; right: 10px; z-index: 3; }
 .body { padding: 12px 14px 14px; }
 .title { margin: 0 0 8px; font-size: 1.02rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.title-link { color: inherit; text-decoration: none; }
+.title-link:hover { color: #ff9800; }
 .meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: .82rem; color: #555; }
 .diff.green { color: #16a34a; } .diff.yellow { color: #ca8a04; } .diff.red { color: #dc2626; }
 .views { margin-top: 8px; font-size: .78rem; color: #999; }

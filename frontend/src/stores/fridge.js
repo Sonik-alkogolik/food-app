@@ -10,6 +10,9 @@ export const useFridgeStore = defineStore('fridge', {
     matches: [],
     searched: false,
     loading: false,
+    // Номер последнего отправленного запроса: ответ с меньшим номером
+    // считается устаревшим и игнорируется.
+    requestId: 0,
   }),
   actions: {
     persist() {
@@ -33,6 +36,8 @@ export const useFridgeStore = defineStore('fridge', {
       this.matches = []
       this.searched = false
       this.persist()
+      // Гасим запрос, который ещё в пути: его ответ уже не актуален.
+      this.requestId++
     },
     async fetchIngredients() {
       if (this.ingredients.length) return
@@ -45,13 +50,26 @@ export const useFridgeStore = defineStore('fridge', {
         this.searched = false
         return
       }
+
+      // Пользователь добавляет продукты по одному, и на каждый клик уходит
+      // свой запрос. Ответы приходят не по порядку, и без этой проверки
+      // старый результат мог перезаписать свежий: в списке оказывались
+      // блюда по неполному набору продуктов.
+      const requestId = ++this.requestId
       this.loading = true
       try {
         const res = await axios.post('/api/fridge/match', { ingredients: this.items })
+        if (requestId !== this.requestId) return
         this.matches = res.data.recipes
         this.searched = true
+      } catch (e) {
+        if (requestId === this.requestId) {
+          this.matches = []
+          this.searched = false
+        }
+        throw e
       } finally {
-        this.loading = false
+        if (requestId === this.requestId) this.loading = false
       }
     },
   },

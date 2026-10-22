@@ -95,4 +95,56 @@ class FridgeMatchTest extends TestCase
         $res = $this->postJson('/api/fridge/match', ['ingredients' => ['яйца']]);
         $res->assertOk()->assertJsonPath('count', 0);
     }
+
+    /**
+     * В базе один и тот же продукт записан по-разному: «Лук», «Лук репчатый»,
+     * «Красный лук». Пользователь набирает «лук» — и должен находить все эти
+     * варианты, а не только точное совпадение.
+     */
+    public function test_finds_variants_of_the_same_product(): void
+    {
+        $this->makeRecipe('Пирог с луком', ['Лук репчатый', 'Мука']);
+        $this->makeRecipe('Салат с луком', ['Красный лук', 'Помидоры']);
+
+        $res = $this->postJson('/api/fridge/match', ['ingredients' => ['лук']]);
+
+        $res->assertOk()->assertJsonPath('count', 2);
+
+        $titles = array_column($res->json('recipes'), 'title');
+        $this->assertContains('Пирог с луком', $titles);
+        $this->assertContains('Салат с луком', $titles);
+
+        // В обоих рецептах лук засчитан как найденный, а не как недостающий.
+        foreach ($res->json('recipes') as $recipe) {
+            $matched = $recipe['matched_ingredients'];
+            $missing = array_column($recipe['missing_ingredients'], 'name');
+
+            $hasOnion = fn (string $name) => mb_stripos($name, 'лук') !== false;
+
+            $this->assertNotEmpty(
+                array_filter($matched, $hasOnion),
+                'Лук должен засчитываться как найденный'
+            );
+            $this->assertEmpty(
+                array_filter($missing, $hasOnion),
+                'Лук не должен попадать в недостающие'
+            );
+        }
+    }
+
+    /**
+     * Похожие, но разные продукты не должны считаться одним и тем же:
+     * «масло» и «маслина» — разные вещи, а уточняющие слова
+     * («Кокосовое молоко») меняют продукт.
+     */
+    public function test_different_products_are_not_confused(): void
+    {
+        $this->makeRecipe('Маслянина', ['Маслина', 'Соль']);
+        $this->makeRecipe('Кокосовое молоко', ['Кокосовое молоко', 'Сахар']);
+
+        $res = $this->postJson('/api/fridge/match', ['ingredients' => ['масло', 'молоко']]);
+
+        $res->assertOk();
+        $this->assertSame(0, $res->json('count'), 'Разные продукты не должны совпадать');
+    }
 }

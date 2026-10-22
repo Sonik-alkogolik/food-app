@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\ResolvesFavorites;
 use App\Http\Controllers\Controller;
 use App\Models\Recipe;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,10 +17,12 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class RecipeDetailController extends Controller
 {
-    public function show(string $slugOrId): Response
+    use ResolvesFavorites;
+
+    public function show(Request $request, string $slugOrId): Response
     {
         $isNumeric = ctype_digit($slugOrId);
-        $cacheKey = 'api.recipe.detail.' . ($isNumeric ? "id-{$slugOrId}" : "slug-{$slugOrId}");
+        $cacheKey = Recipe::detailCacheKey($slugOrId);
 
         try {
             $recipe = Recipe::query()
@@ -47,11 +51,23 @@ class RecipeDetailController extends Controller
                 ->get(['id', 'title', 'slug', 'main_image_url', 'cook_time_minutes', 'difficulty', 'views_count']);
 
             return array_merge($recipe->toArray(), [
-                'views_count' => $recipe->views_count + 1,
                 'ingredients_list' => array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', (string) $recipe->ingredients)))),
                 'similar' => $similar,
             ]);
         });
+
+        // Счётчик просмотров в кеш не кладём: он инкрементится на каждый
+        // запрос, и в кеше значение застывало бы на 10 минут — карточка
+        // показывала бы устаревшее число просмотров.
+        $payload['views_count'] = (int) DB::table('recipes')->where('id', $recipe->id)->value('views_count');
+
+        // Отметка «в избранном» тоже личная: кеш карточки общий для всех
+        // пользователей, поэтому считаем её отдельно от кеша.
+        $payload['is_favorite'] = in_array(
+            $recipe->id,
+            $this->favoriteIds($request, [$recipe->id]),
+            true
+        );
 
         return response()->json(['data' => $payload]);
     }

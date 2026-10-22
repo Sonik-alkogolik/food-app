@@ -7,10 +7,38 @@ public/frontend/
 public/build/
 dist/
 
-# Environment files
+# Симлинк на загруженные файлы (создаётся командой php artisan storage:link).
+# В репозитории ему не место: путь жёстко зашит под машину разработчика
+# и на другой системе превращается в обычный текстовый файл.
+public/storage
+
+# Environment files — в них пароли от базы, почты и внешних сервисов.
 .env
 .env.local
 .env.*.local
+.env.backup
+.env.*.backup
+.env.production
+# ...но пример без секретов остаётся в репозитории.
+!.env.example
+
+# Ключ шифрования Laravel и любые ключи/сертификаты.
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Локальная памятка с паролем администратора — в репозиторий ей не место.
+ADMIN.md
+admin.md
+
+# Локальные базы и дампы: в них хеши паролей пользователей.
+*.sqlite
+*.sqlite3
+database/*.sqlite
+database/*.sqlite3
+*.sql
+*.sql.gz
 
 # Logs and temp files
 *.log
@@ -23,6 +51,10 @@ lerna-debug.log*
 # Test / tool caches
 .phpunit.result.cache
 .phpunit.cache/
+
+# Сгенерированные данные рецептов из интернета (собирает fetch_web_recipes.mjs)
+database/seeders/data/web_recipes.json
+.web_recipes_cache.json
 
 # Editor directories and files
 .vscode/*

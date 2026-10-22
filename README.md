@@ -1,59 +1,283 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Что готовить — рецепты с подбором по холодильнику
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Веб-приложение с каталогом рецептов и «умным холодильником»: пользователь
+отмечает продукты, которые есть дома, и получает список блюд, которые можно
+приготовить из них. Фронтенд — Vue 3 SPA с 3D-кухней на three.js, бэкенд —
+Laravel 12 + Sanctum (токеновая авторизация).
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Стек
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+| Слой | Технологии |
+|------|-----------|
+| Бэкенд | Laravel 12, PHP 8.3, Sanctum, Eloquent, MySQL |
+| Фронтенд | Vue 3, Pinia, vue-router, @unhead/vue, Vite, three.js |
+| Сборка фронта | `frontend/` → `public/frontend` (манифест читает `resources/views/spa.blade.php`) |
+| Тесты | PHPUnit, `RefreshDatabase`, sqlite `:memory:` |
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Установка
 
-## Learning Laravel
+```bash
+composer install
+npm --prefix frontend install
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+cp .env.example .env
+php artisan key:generate
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+В `.env` укажите подключение к базе и заполните два обязательных значения:
 
-## Laravel Sponsors
+```dotenv
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_DATABASE=what_to_cook
+DB_USERNAME=root
+DB_PASSWORD=
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+# Администратор, которого создаёт сидер.
+# Без этих переменных сидер ничего не делает — пароль по умолчанию
+# был бы одинаковым на всех установках.
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=ваш-пароль
+```
 
-### Premium Partners
+Затем миграции, наполнение данными и сборка фронтенда:
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+```bash
+php artisan migrate
+php artisan db:seed          # категории, ~1000 рецептов, шаги, фото, ингредиенты, админ
+php artisan storage:link     # символическая ссылка public/storage -> storage/app/public
+npm --prefix frontend run build
+php artisan serve
+```
 
-## Contributing
+> `public/storage` — служебная ссылка, она **не коммитится** (проверьте
+> `.gitignore`). Создаётся только через `php artisan storage:link`.
+> Без неё загруженные и импортированные изображения не отдаются по `/storage/...`.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+`php artisan db:seed` идемпотентен: повторный запуск не создаёт дубликатов.
+`WebRecipeSeeder` обновляет существующие записи на месте, `ImageUrlSeeder`
+подставляет заглушки только там, где нет настоящего фото, а `AdminUserSeeder`
+создаёт администратора (или обновляет пароль существующего).
 
-## Code of Conduct
+## Авторизация
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Токены Sanctum, передаются в заголовке `Authorization: Bearer <token>`.
 
-## Security Vulnerabilities
+```bash
+# Регистрация → 201 { message, data, token }
+curl -X POST http://127.0.0.1:8000/api/auth/register \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"name":"Иван","email":"ivan@example.com","password":"secret123","password_confirmation":"secret123"}'
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+# Вход → 200 { message, data, token }
+curl -X POST http://127.0.0.1:8000/api/auth/login \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"email":"ivan@example.com","password":"secret123"}'
 
-## License
+# Кто я
+curl http://127.0.0.1:8000/api/auth/me -H 'Authorization: Bearer <token>'
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+# Выход — токен отзывается
+curl -X POST http://127.0.0.1:8000/api/auth/logout -H 'Authorization: Bearer <token>'
+```
+
+При неверном логине и неизвестном e-mail текст ошибки одинаковый, чтобы по
+форме входа нельзя было выяснить, какие адреса зарегистрированы.
+
+### Смена и восстановление пароля
+
+```bash
+# Смена пароля (нужен токен). Остальные токены пользователя отзываются.
+curl -X POST http://127.0.0.1:8000/api/auth/password \
+  -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"current_password":"secret123","password":"newsecret123","password_confirmation":"newsecret123"}'
+
+# Запрос ссылки для сброса. Ответ одинаков для существующих и несуществующих адресов.
+curl -X POST http://127.0.0.1:8000/api/auth/forgot-password \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"email":"ivan@example.com"}'
+
+# Сброс по токену из ссылки
+curl -X POST http://127.0.0.1:8000/api/auth/reset-password \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"token":"<из ссылки>","email":"ivan@example.com","password":"newsecret123","password_confirmation":"newsecret123"}'
+```
+
+Письмо со ссылкой уходит через `MAIL_MAILER` из `.env`; по умолчанию там
+`log`, то есть ссылка печатается в `storage/logs/laravel.log`. В локальной
+среде (`APP_ENV=local`) ссылка дополнительно приходит в ответе
+`POST /api/auth/forgot-password` полем `data.reset_url` — иначе на dev-стенде
+без почты восстановить пароль было бы нечем. В продакшене это поле не
+возвращается.
+
+### Права администратора
+
+`POST /api/upload/image` доступен только администратору (`is_admin = true`).
+Обычный пользователь получает 403, анонимный — 401.
+
+Учётная запись администратора создаётся сидером из переменных `ADMIN_EMAIL`
+и `ADMIN_PASSWORD` в `.env`. Отдельной админки в интерфейсе нет — это
+обычный вход на http://127.0.0.1:8000/login, но с доступом к закрытым
+маршрутам. Локальная памятка с логином, паролем и командами запуска лежит
+в `ADMIN.md` (файл с паролем не коммитится — он в `.gitignore`).
+
+## API
+
+| Метод | Путь | Назначение |
+|-------|------|-----------|
+| POST | `/api/auth/register` | регистрация, выдаёт токен |
+| POST | `/api/auth/login` | вход, выдаёт токен |
+| POST | `/api/auth/logout` | отзыв текущего токена |
+| GET | `/api/auth/me` | текущий пользователь |
+| POST | `/api/auth/password` | смена пароля |
+| POST | `/api/auth/forgot-password` | запрос ссылки для сброса пароля |
+| POST | `/api/auth/reset-password` | установка нового пароля по токену |
+| GET | `/api/categories` | категории с фото и счётчиком рецептов |
+| GET | `/api/recipes` | каталог: фильтры, сортировка, пагинация |
+| GET | `/api/recipes/{slug}` | карточка рецепта (по slug или id) |
+| GET | `/api/recipes/{id}/steps` | шаги приготовления |
+| GET | `/api/search` | поиск по названию и ингредиентам |
+| GET | `/api/random` | случайный рецепт |
+| GET | `/api/ingredients` | справочник продуктов для «холодильника» |
+| POST | `/api/fridge/match` | подбор рецептов по набору продуктов |
+| POST | `/api/upload/image` | загрузка изображения (админ) |
+| GET | `/api/favorites` | избранное пользователя (нужен токен) |
+| POST | `/api/favorites` | добавить рецепт в избранное (нужен токен) |
+| DELETE | `/api/favorites/{recipe_id}` | убрать из избранного (нужен токен) |
+| GET | `/api/recipes/{slug}/comments` | комментарии к рецепту (публично) |
+| POST | `/api/recipes/{slug}/comments` | написать комментарий (нужен токен) |
+| DELETE | `/api/comments/{id}` | удалить комментарий (автор или админ) |
+
+Фильтры каталога: `category_id` (или `category` — slug'ом), `difficulty`
+(`easy`/`medium`/`hard`, можно через запятую), `max_time`, `sort`
+(`popular`/`time`/`title`), `page`, `per_page` (1–48, по умолчанию 12).
+Неизвестное значение `difficulty` игнорируется, а не обнуляет выдачу.
+
+Любой неизвестный путь внутри `/api` возвращает JSON `404` — и для `GET`,
+и для остальных методов.
+
+### Персональные данные на публичных маршрутах
+
+Каталог, карточка рецепта и список комментариев открыты для гостей, но если
+запрос пришёл с токеном, сервер узнаёт пользователя и добавляет личные поля:
+
+- `is_favorite` — отметка «в избранном» у рецепта;
+- `can_delete` — может ли текущий пользователь удалить комментарий.
+
+Это работает через middleware `auth.optional`: обычный `auth:sanctum` на
+публичном маршруте отклонил бы гостя, а без него пользователь не определялся
+вовсе. Такие поля считаются отдельно от кеша карточки — кеш общий для всех,
+а избранное личное.
+
+## Ограничения частоты запросов
+
+Лимиты заданы в `AppServiceProvider::registerRateLimiters()` и подключены
+к маршрутам через `throttle:<лимит>`. Каждый лимит двойной: считается и по
+пользователю, и по IP-адресу. Лимит только по пользователю обходится
+регистрацией десятка аккаунтов, лимит только по IP — сменой адреса; запрос
+проходит, только если не исчерпан ни один из счётчиков.
+
+| Лимит | На пользователя (или гостя с одного IP) | На один IP обобщённо | Куда применяется |
+|-------|------------------------------------------|------------------------|-------------------|
+| `api-read` | 120/мин | 400/мин | каталог, категории, ингредиенты, избранное |
+| `api-detail` | 240/мин | 800/мин | карточка рецепта |
+| `api-search` | 60/мин | 200/мин | поиск и подбор по холодильнику |
+| `api-write` | 20/мин | 60/мин | загрузка изображений, избранное, комментарии, смена пароля |
+| `api-login` | 10/мин | 10/мин | вход |
+| `api-register` | 5/мин | 20/мин | регистрация |
+| `api-reset` | 5/мин | 20/мин | сброс пароля |
+
+## Язык
+
+В `.env` выставлен `APP_LOCALE=ru`, поэтому сообщения валидации и письмо о
+сбросе пароля приходят по-русски. Переводы лежат в `lang/ru/`
+(`validation.php`, `auth.php`, `passwords.php`) и в `lang/ru.json` — там
+живут строки стандартного уведомления Laravel о сбросе пароля, ключи которых
+равны английскому тексту.
+
+Правил, для которых нет перевода, не страшно: Laravel подставит английский
+fallback (`APP_FALLBACK_LOCALE=en`).
+
+## Кеш
+
+Карточка рецепта кешируется на 10 минут. Ключи кеша сбрасываются при
+сохранении и удалении рецепта (`Recipe::booted()`), поэтому правка рецепта
+видна сразу, а не по истечении TTL. Счётчик просмотров в кеш не попадает —
+он читается из базы при каждом запросе.
+
+`php artisan db:seed` в конце делает `Cache::flush()`: сидеры пишут данные
+напрямую и обходят события модели, поэтому кеш иначе остался бы со старыми
+карточками.
+
+## Интерфейс
+
+SPA собрана из страниц:
+
+| Путь | Что делает |
+|------|-----------|
+| `/` | главная |
+| `/recipes` | каталог с фильтрами |
+| `/recipes/:slug` | карточка рецепта с избранным и комментариями |
+| `/categories`, `/categories/:slug` | категории |
+| `/search` | поиск |
+| `/fridge` | 3D-кухня с холодильником и подбором |
+| `/random` | случайный рецепт |
+| `/login` | вход, регистрация и «забыли пароль» (три режима на одной странице) |
+| `/reset-password` | установка нового пароля по ссылке из письма |
+| `/favorites` | избранное (только для авторизованных) |
+| `/account` | профиль, смена пароля, выход (только для авторизованных) |
+
+Токен Sanctum лежит в `localStorage` (`auth-token`), профиль — в `auth-user`.
+Все запросы идут через общий axios-инстанс `frontend/src/api.js`, который сам
+подставляет заголовок `Authorization` и убирает сессию, если сервер ответил
+401 (токен протух или отозван).
+
+Избранное у гостя хранится локально в `localStorage` (`fav-slugs`) и после
+входа сливается на сервер — так ранее отмеченные рецепты не теряются.
+
+## Структура
+
+```
+app/
+  Http/Controllers/Api/    контроллеры API
+  Http/Middleware/         EnsureUserIsAdmin, AuthenticateIfPresent
+  Models/                  Recipe, Category, Ingredient, User, Favorite, Comment
+  Services/FridgeMatcher   подбор рецептов по продуктам
+  Support/Slug             транслитерация slug'ов
+database/
+  migrations/              схема
+  seeders/                 наполнение данными
+lang/ru/                   переводы сообщений валидации и писем
+frontend/
+  src/api.js               axios-инстанс: токен, 401-обработчик
+  src/views/               страницы SPA
+  src/components/          карточка, фильтры, шаги, 3D-кухня, избранное, комментарии
+  src/stores/              Pinia: recipes, fridge, auth, favorites
+resources/views/spa.blade.php   оболочка SPA
+routes/api.php             маршруты API
+routes/web.php             SPA-fallback
+```
+
+## Тесты
+
+```bash
+php artisan test
+```
+
+Покрыты: аутентификация и отзыв токена, права администратора на загрузку,
+лимиты частоты запросов, JSON-ответы для неизвестных путей `/api`, фильтр
+`difficulty`, инвалидация кеша карточки и рост счётчика просмотров, сидеры
+(веб-рецепты, изображения), избранное (в том числе личность `is_favorite` на
+публичных маршрутах), комментарии, смена пароля и сброс пароля, русские
+сообщения валидации.
+
+## Что стоит сделать следующим
+
+- Подтверждение email при регистрации и письма о новых комментариях.
+- Аватар и редактирование профиля.
+- Поиск по ингредиентам в «холодильнике» без ручного отбора продуктов.
+- Полноценные картинки пользовательских рецептов (сейчас загрузка есть
+  только у администратора).
+- CI: прогон `php artisan test` и сборка фронтенда на каждый коммит.

@@ -33,15 +33,30 @@
         </ul>
 
         <div class="actions">
-          <button class="btn fav" :class="{ active: isFav }" @click="toggleFav">
-            {{ isFav ? '❤️ В избранном' : '🤍 В избранное' }}
-          </button>
+          <FavoriteButton :recipe="recipe" />
           <button class="btn" @click="share">📤 Поделиться</button>
           <button class="btn" @click="print">🖨️ Распечатать</button>
         </div>
         <p v-if="copied" class="copied">Ссылка скопирована!</p>
       </div>
     </div>
+
+    <!-- Видео приготовления -->
+    <section class="section" v-if="recipe.video_url">
+      <h2>🎬 Как готовить — видео</h2>
+      <div class="video-wrap">
+        <iframe
+          :src="videoEmbedUrl"
+          :title="`Видео приготовления: ${recipe.title}`"
+          frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen
+        ></iframe>
+      </div>
+      <a class="video-link" :href="recipe.video_url" target="_blank" rel="noopener">
+        Открыть видео на YouTube ↗
+      </a>
+    </section>
 
     <!-- Ингредиенты с чекбоксами -->
     <section class="section">
@@ -86,10 +101,10 @@
       </div>
     </section>
 
-    <!-- Комментарии (заглушка) -->
+    <!-- Комментарии -->
     <section class="section comments">
       <h2>💬 Комментарии</h2>
-      <p class="soon">Раздел комментариев скоро появится — мы работаем над ним! 🚧</p>
+      <CommentsSection :recipe="recipe" />
     </section>
   </article>
 </template>
@@ -103,6 +118,8 @@ import { useHead } from '@unhead/vue'
 import { useRecipeStore } from '../stores/recipes'
 import RecipeCard from '../components/RecipeCard.vue'
 import RecipeSteps from '../components/RecipeSteps.vue'
+import FavoriteButton from '../components/FavoriteButton.vue'
+import CommentsSection from '../components/CommentsSection.vue'
 
 const store = useRecipeStore()
 const route = useRoute()
@@ -114,14 +131,19 @@ const recipe = computed(() => store.currentRecipe)
 const diffLabel = computed(() => ({ easy: 'Легко', medium: 'Средне', hard: 'Сложно' }[recipe.value?.difficulty] || ''))
 const haveCount = computed(() => checked.value.filter(Boolean).length)
 
-// Избранное — localStorage (без авторизации)
-const FAV_KEY = 'fav-slugs'
-const favs = ref(JSON.parse(localStorage.getItem(FAV_KEY) || '[]'))
-const isFav = computed(() => favs.value.includes(route.params.slug))
-function toggleFav() {
-  favs.value = isFav.value ? favs.value.filter((s) => s !== route.params.slug) : [...favs.value, route.params.slug]
-  localStorage.setItem(FAV_KEY, JSON.stringify(favs.value))
-}
+/**
+ * Адрес видео для встраивания в плеер.
+ * Источники отдают ссылку в разных видах (watch?v=, /shorts/, /embed/) —
+ * приводим всё к /embed/VIDEO_ID, иначе iframe refuses показывать ролик.
+ */
+const videoEmbedUrl = computed(() => {
+  const url = (recipe.value?.video_url || '').trim()
+  if (!url) return ''
+  const match = url.match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{6,})/)
+  return match ? `https://www.youtube.com/embed/${match[1]}` : url
+})
+
+// Избранное живёт в сторе избранного (локально для гостя, на сервере — для пользователя)
 
 async function share() {
   const url = location.href
@@ -159,6 +181,9 @@ useHead(computed(() => {
         recipeIngredient: r.ingredients_list,
         recipeInstructions: (r.steps || []).map((s) => ({ '@type': 'HowToStep', name: s.title, text: s.description })),
         nutrition: { '@type': 'NutritionInformation', calories: `${r.calories_per_serving} kcal` },
+        ...(r.video_url ? {
+          video: [{ '@type': 'VideoObject', name: `Как готовить: ${r.title}`, embedUrl: r.video_url, description: r.description }],
+        } : {}),
       }),
     }],
   }
@@ -188,13 +213,15 @@ watch(() => route.params.slug, (s) => s && load(s))
 .desc { color: #555; line-height: 1.5; }
 .facts { list-style: none; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; color: #444; }
 .easy { color: #16a34a; } .medium { color: #ca8a04; } .hard { color: #dc2626; }
-.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
 .actions .btn { background: #f3f4f6; color: #333; }
-.actions .fav { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
-.actions .fav.active { background: #ffe0e0; }
 .copied { color: #16a34a; font-size: .85rem; }
 .section { margin-top: 36px; }
 .section h2 { margin-bottom: 14px; }
+.video-wrap { position: relative; aspect-ratio: 16/9; border-radius: 14px; overflow: hidden; background: #000; }
+.video-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.video-link { display: inline-block; margin-top: 10px; color: #ff9800; font-weight: 600; text-decoration: none; }
+.video-link:hover { text-decoration: underline; }
 .section small { color: #999; font-weight: normal; }
 .ingr { list-style: none; padding: 0; columns: 2; }
 .ingr label { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; cursor: pointer; }
@@ -203,6 +230,5 @@ watch(() => route.params.slug, (s) => s && load(s))
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .gallery img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; cursor: pointer; }
 .similar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
-.comments .soon { background: #fff8e1; border: 1px dashed #ffd54f; border-radius: 10px; padding: 18px; color: #8d6e00; }
 @media (max-width: 800px) { .top { grid-template-columns: 1fr; } .ingr { columns: 1; } .facts { grid-template-columns: 1fr; } }
 </style>
