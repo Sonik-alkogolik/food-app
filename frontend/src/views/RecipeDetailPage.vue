@@ -36,6 +36,9 @@
           <FavoriteButton :recipe="recipe" />
           <button class="btn" @click="share">📤 Поделиться</button>
           <button class="btn" @click="print">🖨️ Распечатать</button>
+          <button class="btn cooking-btn" :class="{ on: cookingActive }" @click="toggleCooking">
+            {{ cookingActive ? '✖️ Выйти из режима готовки' : '👨‍🍳 Готовим' }}
+          </button>
         </div>
         <p v-if="copied" class="copied">Ссылка скопирована!</p>
       </div>
@@ -73,7 +76,7 @@
     </section>
 
     <!-- Пошаговое приготовление с фото -->
-    <section class="section">
+    <section class="section" id="steps">
       <h2>👨‍🍳 Пошаговое приготовление</h2>
       <RecipeSteps :steps="recipe.steps || []" />
     </section>
@@ -126,9 +129,13 @@ import RecipeSteps from '../components/RecipeSteps.vue'
 import FavoriteButton from '../components/FavoriteButton.vue'
 import CommentsSection from '../components/CommentsSection.vue'
 import RecipeResults from '../components/RecipeResults.vue'
+import { useCookingMode } from '../composables/useCookingMode'
 
 const store = useRecipeStore()
 const route = useRoute()
+// Режим готовки — общее состояние приложения, поэтому его рефы
+// разворачиваем в setup: так они корректно подставляются в шаблон.
+const { active: cookingActive, toggle: toggleCookingMode } = useCookingMode()
 const checked = ref([])
 const zoom = ref(false)
 const copied = ref(false)
@@ -160,6 +167,17 @@ async function share() {
 }
 
 function print() { window.print() }
+
+/**
+ * Режим готовки: крупный шрифт и негаснущий экран. Включаем — сразу
+ * показываем шаги, чтобы не искать их по странице.
+ */
+async function toggleCooking() {
+  await toggleCookingMode()
+  if (cookingActive.value) {
+    document.getElementById('steps')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
 
 function openFromGallery(step) {
   document.getElementById(`step-${step.step_number}`)?.scrollIntoView({ behavior: 'smooth' })
@@ -221,6 +239,7 @@ watch(() => route.params.slug, (s) => s && load(s))
 .easy { color: #16a34a; } .medium { color: #ca8a04; } .hard { color: #dc2626; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
 .actions .btn { background: #f3f4f6; color: #333; }
+.cooking-btn.on { background: #ff9800; color: #fff; }
 .copied { color: #16a34a; font-size: .85rem; }
 .section { margin-top: 36px; }
 .section h2 { margin-bottom: 14px; }

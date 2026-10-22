@@ -41,6 +41,8 @@
     <router-view />
   </main>
 
+  <CookingModeBar />
+
   <footer class="footer">
     <p>© 2026 «Что приготовить?» — 1000 домашних рецептов с пошаговыми фото</p>
   </footer>
@@ -53,6 +55,7 @@ import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import { useFavoritesStore } from './stores/favorites'
+import CookingModeBar from './components/CookingModeBar.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
