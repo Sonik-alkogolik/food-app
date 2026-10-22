@@ -302,6 +302,50 @@ fallback (`APP_FALLBACK_LOCALE=en`).
 напрямую и обходят события модели, поэтому кеш иначе остался бы со старыми
 карточками.
 
+## PWA (установка и работа без сети)
+
+Приложение можно поставить на телефон как отдельное приложение и открывать
+без интернета. Service worker и манифест собирает `vite-plugin-pwa`
+(`generateSW`), манифест написан руками — `public/manifest.webmanifest`.
+
+| Файл | Что это |
+|------|---------|
+| `public/manifest.webmanifest` | имя, иконки, цвета, `start_url`, `display: standalone` |
+| `public/sw.js` | сгенерированный service worker, лежит в корне сайта |
+| `public/img/icon-192.png`, `icon-512.png`, `icon-maskable-512.png` | иконки приложения |
+| `frontend/vite.config.js` | настройки `VitePWA`: что попадает в precache и в runtime-кэш |
+
+Service worker лежит в **корне** сайта (`/sw.js`), а не в `/frontend/`: у
+service worker'а scope определяется его расположением, и из `/frontend/`
+он не контролировал бы страницы рецептов. Поэтому в precache попадают
+`frontend/index.html` (оболочка) и файлы сборки, а `navigateFallback`
+отдаёт оболочку для любого маршрута SPA.
+
+Оболочка одна и та же для сервера и для офлайна: `resources/views/spa.blade.php`
+отдаёт собранный `public/frontend/index.html` как есть, а service worker
+кладёт в кеш ровно этот файл. Благодаря этому страница выглядит одинаково
+онлайн и офлайн, а обновления подхватываются сами: workbox пересчитывает
+ревизии файлов при каждой сборке, `skipWaiting` и `clientsClaim` включены,
+`registerType: 'autoUpdate'`.
+
+Что работает без сети:
+
+- страницы приложения и каталог рецептов — из precache;
+- ответы API — `NetworkFirst` (сеть, при её отсутствии кеш, таймаут 3 с);
+- картинки блюд и фотоотчётов — `CacheFirst`.
+
+Что намеренно не кешируется: `/api/auth` (вход и токены) и `/api/favorites`
+(личное состояние пользователя).
+
+Регистрация service worker'а — только в продакшен-сборке (`import.meta.env.PROD`),
+чтобы не мешать разработке. После изменения фронтенда нужна пересборка:
+
+```bash
+cd frontend && npm run build
+```
+
+Он заново создаст `public/sw.js` и обновит precache.
+
 ## Фотографии
 
 Раньше у рецептов из локального каталога не было своих фотографий, и
@@ -376,6 +420,11 @@ frontend/
   src/views/               страницы SPA
   src/components/          карточка, фильтры, шаги, 3D-кухня, избранное, комментарии, фотоотчёты
   src/stores/              Pinia: recipes, fridge, auth, favorites
+  vite.config.js           сборка + настройки PWA (precache, runtime-кэш)
+public/
+  manifest.webmanifest     манифест PWA
+  sw.js                    service worker (генерируется при сборке)
+  img/                     иконки приложения
 resources/views/spa.blade.php   оболочка SPA
 routes/api.php             маршруты API
 routes/web.php             SPA-fallback
@@ -393,7 +442,8 @@ php artisan test
 (веб-рецепты, изображения), избранное (в том числе личность `is_favorite` на
 публичных маршрутах), комментарии, фотоотчёты (в том числе проверка типа
 загружаемого файла по содержимому и лимит гостей), смена пароля и сброс
-пароля, русские сообщения валидации.
+пароля, PWA (манифест, иконки, service worker в корне сайта, оболочка с
+ссылкой на манифест), русские сообщения валидации.
 
 ## Что стоит сделать следующим
 
