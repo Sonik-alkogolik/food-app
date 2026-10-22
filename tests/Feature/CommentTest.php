@@ -55,12 +55,13 @@ class CommentTest extends TestCase
             ->assertJsonPath('data.0.user.name', 'Иван');
     }
 
-    public function test_guest_cannot_post_comment(): void
+    public function test_guest_post_comment_requires_name(): void
     {
         $recipe = $this->makeRecipe();
 
         $this->postJson('/api/recipes/' . $recipe->slug . '/comments', ['body' => 'Вкусно!'])
-            ->assertStatus(401);
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('guest_name');
     }
 
     public function test_user_can_post_comment(): void

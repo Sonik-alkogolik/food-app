@@ -68,9 +68,19 @@ Route::get('/recipes/{slug}/comments', [CommentController::class, 'index'])
     ->middleware(['auth.optional', 'throttle:api-read']);
 
 /*
-| Личное: избранное и комментарии. Всё требует токена — избранное
-| принадлежит конкретному пользователю, а комментарии без авторизации
-| превращаются в анонимный поток мусора.
+| Комментарий может оставить и гость — под своим именем. Гостей держит
+| отдельный лимит: 3 комментария за 15 минут с одного адреса, иначе
+| через анонимные комментарии можно было бы завалить рецепт. Авторизованным
+| этот лимит не мешает: у них общий лимит на запись (throttle:api-write).
+*/
+Route::post('/recipes/{slug}/comments', [CommentController::class, 'store'])
+    ->where('slug', '[A-Za-z0-9\-_\d]+')
+    ->middleware(['auth.optional', 'throttle:api-write', 'throttle:guest-comment']);
+
+/*
+| Личное: избранное и удаление комментариев. Всё требует токена —
+| избранное принадлежит конкретному пользователю, а удалить комментарий
+| может только его автор или администратор.
 */
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/favorites', [FavoriteController::class, 'index'])
@@ -81,9 +91,6 @@ Route::middleware('auth:sanctum')->group(function () {
         ->whereNumber('recipeId')
         ->middleware('throttle:api-write');
 
-    Route::post('/recipes/{slug}/comments', [CommentController::class, 'store'])
-        ->where('slug', '[A-Za-z0-9\-_\d]+')
-        ->middleware('throttle:api-write');
     Route::delete('/comments/{id}', [CommentController::class, 'destroy'])
         ->whereNumber('id')
         ->middleware('throttle:api-write');

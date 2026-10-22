@@ -7,7 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Комментарий пользователя к рецепту.
+ * Комментарий к рецепту.
+ *
+ * Написать комментарий может и гость: тогда user_id пустой, а автора
+ * зовут по имени из guest_name.
  */
 class Comment extends Model
 {
@@ -15,6 +18,7 @@ class Comment extends Model
 
     protected $fillable = [
         'user_id',
+        'guest_name',
         'recipe_id',
         'body',
     ];
@@ -25,24 +29,28 @@ class Comment extends Model
         return $this->belongsTo(Recipe::class);
     }
 
-    /** Автор комментария. */
+    /** Автор комментария. У гостя его нет. */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Может ли пользователь удалить этот комментарий.
-     *
-     * Удалять может автор или администратор — иначе любой прохожий
-     * стирал бы чужие мнения.
-     */
-    public function canBeDeletedBy(?User $user): bool
+    /** Написал ли комментарий гость. */
+    public function isGuest(): bool
     {
-        if (!$user) {
-            return false;
-        }
+        return $this->user_id === null;
+    }
 
-        return $user->id === $this->user_id || (bool) $user->is_admin;
+    /**
+     * Как подписать автора.
+     *
+     * У зарегистрированного пользователя есть имя в профиле, у гостя —
+     * в самом комментарии. Если имени нет (старые записи, например),
+     * показываем «Аноним».
+     */
+    public function authorName(): string
+    {
+        return $this->user?->name
+            ?: ($this->guest_name ?: 'Аноним');
     }
 }

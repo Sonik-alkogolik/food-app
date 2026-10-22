@@ -11,6 +11,7 @@
       <li v-for="c in comments" :key="c.id" class="comment">
         <div class="head">
           <span class="author">{{ c.user?.name || 'Аноним' }}</span>
+          <span v-if="c.is_guest" class="guest-mark" title="Гость">гость</span>
           <time class="date" :datetime="c.created_at">{{ formatDate(c.created_at) }}</time>
           <button v-if="c.can_delete" class="del" type="button" title="Удалить комментарий" @click="remove(c)">
             🗑
@@ -20,8 +21,24 @@
       </li>
     </ul>
 
-    <!-- Форма: только для авторизованных -->
-    <form v-if="auth.isAuthenticated" class="form" @submit.prevent="submit">
+    <!-- Форма: гостю — под именем, пользователю — от аккаунта -->
+    <form class="form" @submit.prevent="submit">
+      <div v-if="!auth.isAuthenticated" class="guest-name">
+        <label for="guest-name">Ваше имя</label>
+        <input
+          id="guest-name"
+          v-model="guestName"
+          type="text"
+          maxlength="50"
+          placeholder="Как вас зовут"
+          autocomplete="nickname"
+        />
+        <p class="guest-note">
+          Без аккаунта комментарий останется под этим именем. Гостям доступно
+          3 комментария за 15 минут.
+        </p>
+      </div>
+
       <textarea
         v-model="text"
         rows="3"
@@ -32,16 +49,19 @@
       <p v-if="formError" class="error">{{ formError }}</p>
       <div class="form-foot">
         <span class="counter">{{ text.length }}/2000</span>
-        <button class="btn" type="submit" :disabled="sending || !text.trim()">
+        <button
+          class="btn"
+          type="submit"
+          :disabled="sending || !text.trim() || (!auth.isAuthenticated && !guestName.trim())"
+        >
           {{ sending ? 'Отправка…' : 'Отправить' }}
         </button>
       </div>
     </form>
 
-    <div v-else class="guest">
-      <p>Чтобы оставить комментарий, войдите в аккаунт.</p>
-      <router-link class="btn" :to="loginLink">Войти</router-link>
-    </div>
+    <p v-if="!auth.isAuthenticated" class="guest-hint">
+      <router-link :to="loginLink">Войдите</router-link>, чтобы удалять свои комментарии.
+    </p>
 
     <button v-if="page < lastPage" class="more" type="button" :disabled="loading" @click="loadMore">
       {{ loading ? 'Загрузка…' : 'Показать ещё' }}
@@ -71,6 +91,8 @@ const sending = ref(false)
 const loadError = ref('')
 const formError = ref('')
 const text = ref('')
+// Имя гостя запоминаем: не приходится вводить его перед каждым отзывом.
+const guestName = ref(localStorage.getItem('comment-guest-name') || '')
 
 const slug = computed(() => props.recipe?.slug || route.params.slug)
 const loginLink = computed(() => ({ path: '/login', query: { redirect: route.fullPath } }))
@@ -116,19 +138,38 @@ function loadMore() {
 
 async function submit() {
   const body = text.value.trim()
+  const name = guestName.value.trim()
   if (!body) return
+  if (!auth.isAuthenticated && !name) {
+    formError.value = 'Напишите, как вас зовут.'
+    return
+  }
   sending.value = true
   formError.value = ''
   try {
-    const res = await api.post(`/api/recipes/${encodeURIComponent(slug.value)}/comments`, { body })
+    const payload = { body }
+    // Гость подписывается именем, пользователь — от аккаунта.
+    if (!auth.isAuthenticated) payload.guest_name = name
+
+    const res = await api.post(`/api/recipes/${encodeURIComponent(slug.value)}/comments`, payload)
     const comment = res.data?.data?.comment || res.data?.data
-    if (comment) comments.value = [{ ...comment, can_delete: true }, ...comments.value]
+    if (comment) {
+      // Право удаления решает сервер: у гостя его нет.
+      comments.value = [{ ...comment, can_delete: !!comment.can_delete }, ...comments.value]
+    }
     text.value = ''
+    if (!auth.isAuthenticated) {
+      localStorage.setItem('comment-guest-name', name)
+    }
   } catch (e) {
-    if (e.response?.status === 401) {
-      formError.value = 'Войдите в аккаунт, чтобы оставить комментарий.'
+    if (e.response?.status === 429) {
+      formError.value = e.response?.data?.message || 'Слишком много комментариев. Попробуйте позже.'
     } else if (e.response?.status === 422) {
-      formError.value = e.response?.data?.errors?.body?.[0] || e.response?.data?.message || 'Проверьте текст комментария.'
+      formError.value =
+        e.response?.data?.errors?.guest_name?.[0]
+        || e.response?.data?.errors?.body?.[0]
+        || e.response?.data?.message
+        || 'Проверьте текст комментария.'
     } else {
       formError.value = e.response?.data?.message || 'Не удалось отправить комментарий.'
     }
@@ -157,6 +198,7 @@ onMounted(() => load(1))
 .comment { background: #fff; border: 1px solid #eee; border-radius: 12px; padding: 12px 14px; }
 .head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .author { font-weight: 600; color: #333; }
+.guest-mark { font-size: .7rem; color: #9aa0a8; border: 1px solid #e2e5ea; border-radius: 999px; padding: 1px 7px; }
 .date { color: #999; font-size: .8rem; }
 .del { margin-left: auto; border: none; background: none; cursor: pointer; font-size: .95rem; opacity: .6; }
 .del:hover { opacity: 1; }
@@ -167,6 +209,15 @@ onMounted(() => load(1))
   font: inherit; resize: vertical; box-sizing: border-box;
 }
 .form textarea:focus { outline: none; border-color: #ff9800; }
+.guest-name { display: flex; flex-direction: column; gap: 4px; }
+.guest-name label { font-size: .85rem; color: #666; }
+.guest-name input {
+  width: 100%; border: 1px solid #ddd; border-radius: 10px; padding: 9px 12px;
+  font: inherit; box-sizing: border-box;
+}
+.guest-name input:focus { outline: none; border-color: #ff9800; }
+.guest-note { margin: 0; font-size: .78rem; color: #999; }
+.guest-hint { margin: 10px 0 0; font-size: .85rem; color: #888; }
 .form-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .counter { color: #999; font-size: .78rem; }
 .btn {
@@ -175,8 +226,6 @@ onMounted(() => load(1))
 }
 .btn:disabled { opacity: .6; cursor: default; }
 .error { color: #dc2626; font-size: .85rem; margin: 0; }
-.guest { background: #fff8e1; border: 1px dashed #ffd54f; border-radius: 12px; padding: 16px; color: #8d6e00; }
-.guest p { margin: 0 0 10px; }
 .more { margin-top: 14px; padding: 9px 16px; border: 1px solid #ddd; background: #fff; border-radius: 10px; cursor: pointer; }
 .more:disabled { opacity: .6; cursor: default; }
 @media (max-width: 800px) { .btn { width: 100%; text-align: center; } }
