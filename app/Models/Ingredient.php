@@ -10,7 +10,11 @@ class Ingredient extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'slug'];
+    protected $fillable = ['name', 'slug', 'is_pantry_staple'];
+
+    protected $casts = [
+        'is_pantry_staple' => 'boolean',
+    ];
 
     public function recipes(): BelongsToMany
     {

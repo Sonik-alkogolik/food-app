@@ -11,7 +11,7 @@ class IngredientController extends Controller
     public function index(): JsonResponse
     {
         return response()->json(
-            Ingredient::orderBy('name')->get(['id', 'name', 'slug'])
+            Ingredient::orderBy('name')->get(['id', 'name', 'slug', 'is_pantry_staple'])
         );
     }
 }

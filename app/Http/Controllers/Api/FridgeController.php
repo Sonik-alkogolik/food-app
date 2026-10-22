@@ -18,12 +18,18 @@ class FridgeController extends Controller
         $data = $request->validate([
             'ingredients' => ['required', 'array'],
             'ingredients.*' => ['required', 'string', 'max:100'],
+            // Базовые продукты (соль, масло, вода…) по умолчанию не считаются
+            // недостающими. Пользователь может попросить учитывать их.
+            'include_pantry_staples' => ['sometimes', 'boolean'],
         ]);
 
-        $results = $this->matcher->match($data['ingredients']);
+        $includeStaples = (bool) ($data['include_pantry_staples'] ?? false);
+
+        $results = $this->matcher->match($data['ingredients'], $includeStaples);
 
         return response()->json([
             'fridge' => $data['ingredients'],
+            'include_pantry_staples' => $includeStaples,
             'count' => $results->count(),
             'recipes' => $results,
         ]);

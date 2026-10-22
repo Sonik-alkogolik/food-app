@@ -20,12 +20,56 @@
     </form>
 
     <div class="chips" v-if="store.items.length">
-      <span v-for="item in store.items" :key="item" class="chip">
+      <span
+        v-for="item in store.items"
+        :key="item"
+        class="chip"
+        :class="{ staple: store.stapleNames.has(item) }"
+      >
+        <span v-if="store.stapleNames.has(item)" class="staple-mark" title="Базовый продукт">🧂</span>
         {{ item }}
         <button class="chip-x" @click="store.removeItem(item)" aria-label="Удалить">×</button>
       </span>
       <button class="clear" @click="store.clear()">Очистить всё</button>
     </div>
+
+    <!-- Базовые продукты: их не нужно искать в холодильнике -->
+    <section class="staples" v-if="store.pantryStaples.length">
+      <label class="staple-toggle">
+        <input
+          type="checkbox"
+          :checked="store.includePantryStaples"
+          @change="store.setIncludePantryStaples($event.target.checked)"
+        />
+        Учитывать базовые продукты
+        <span class="staple-hint">
+          {{ store.includePantryStaples
+            ? 'соль, масло и прочее считаются недостающими, если их нет в холодильнике'
+            : 'соль, перец, масло, сахар, мука и вода считаются всегда доступными' }}
+        </span>
+      </label>
+
+      <div class="staple-list">
+        <button
+          v-for="ing in visibleStaples"
+          :key="ing.id"
+          type="button"
+          class="staple-item"
+          :class="{ on: store.items.includes(ing.name.toLowerCase()) }"
+          @click="toggleStaple(ing)"
+        >
+          🧂 {{ ing.name }}
+        </button>
+        <button
+          v-if="store.pantryStaples.length > limit"
+          type="button"
+          class="staple-more"
+          @click="showAllStaples = !showAllStaples"
+        >
+          {{ showAllStaples ? 'Свернуть' : 'Показать все (' + store.pantryStaples.length + ')' }}
+        </button>
+      </div>
+    </section>
 
     <div v-if="store.loading" class="status">Ищем рецепты…</div>
     <div v-else-if="store.searched && store.matches.length === 0" class="status empty">
@@ -53,6 +97,9 @@
         <p class="missing" v-if="recipe.missing_ingredients.length">
           Не хватает: {{ recipe.missing_ingredients.map(m => m.name).join(', ') }}
         </p>
+        <p class="ignored" v-if="recipe.ignored_pantry_staples && recipe.ignored_pantry_staples.length">
+          🧂 Базовые продукты не учитываются: {{ recipe.ignored_pantry_staples.join(', ') }}
+        </p>
         <button class="more">Смотреть рецепт →</button>
       </div>
     </div>
@@ -78,13 +125,19 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useFridgeStore } from '../stores/fridge'
 import Kitchen3D from '../components/Kitchen3D.vue'
 
 const store = useFridgeStore()
 const newItem = ref('')
 const selected = ref(null)
+const showAllStaples = ref(false)
+const limit = 12
+
+const visibleStaples = computed(() =>
+  showAllStaples.value ? store.pantryStaples : store.pantryStaples.slice(0, limit),
+)
 
 const isHave = (name) => store.items.includes(name.toLowerCase())
 
@@ -94,6 +147,16 @@ function onAdd() {
 
 function openRecipe(recipe) {
   selected.value = recipe
+}
+
+/** Базовый продукт можно добавить в холодильник и убрать обратно. */
+function toggleStaple(ingredient) {
+  const name = ingredient.name.toLowerCase()
+  if (store.items.includes(name)) {
+    store.removeItem(name)
+  } else {
+    store.addItem(name)
+  }
 }
 
 onMounted(() => {
@@ -112,8 +175,21 @@ onMounted(() => {
 .add-form button:disabled { opacity: .5; cursor: default; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 18px; }
 .chip { background: #fff3e0; border: 1px solid #ffc980; padding: 6px 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; }
+.chip.staple { background: #f3f4f6; border-color: #d6d8dd; color: #7a7f87; }
+.staple-mark { font-size: .9em; }
 .chip-x { border: none; background: none; cursor: pointer; font-size: 16px; color: #b26a00; }
+.chip.staple .chip-x { color: #9aa0a8; }
 .clear { border: none; background: none; color: #999; cursor: pointer; text-decoration: underline; }
+.staples { margin: 0 0 18px; padding: 12px 14px; border: 1px dashed #d8dbe0; border-radius: 12px; background: #fafbfc; }
+.staple-toggle { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 600; cursor: pointer; }
+.staple-toggle input { width: 18px; height: 18px; accent-color: #ff9800; }
+.staple-hint { font-weight: 400; color: #888; font-size: .85em; }
+.staple-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.staple-item { border: 1px solid #e2e5ea; background: #fff; color: #8b9099; border-radius: 999px; padding: 5px 12px; font-size: .85em; cursor: pointer; }
+.staple-item:hover { border-color: #ffc980; color: #b26a00; }
+.staple-item.on { background: #fff3e0; border-color: #ffc980; color: #b26a00; }
+.staple-more { border: none; background: none; color: #ff9800; cursor: pointer; font-size: .85em; padding: 5px 0; }
+.ignored { color: #9aa0a8; font-size: .82em; }
 .status { padding: 14px; border-radius: 10px; background: #f5f5f5; margin-bottom: 16px; }
 .status.empty { background: #ffecec; color: #b04040; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
