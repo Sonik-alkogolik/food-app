@@ -24,9 +24,13 @@ class FridgeMatcher
      * Подбирает рецепты по списку ингредиентов пользователя.
      *
      * @param  array<int,string> $fridgeNames
+     * @param  bool  $includePantryStaples  Считать ли базовые продукты
+     *                                       (соль, перец, масло, сахар, мука,
+     *                                       вода) недостающими. По умолчанию
+     *                                       нет: они есть в любой кухне.
      * @return Collection<int,array>
      */
-    public function match(array $fridgeNames): Collection
+    public function match(array $fridgeNames, bool $includePantryStaples = false): Collection
     {
         $fridgeSlugs = collect($fridgeNames)
             ->map(fn ($n) => Slug::make((string) $n))
@@ -58,10 +62,19 @@ class FridgeMatcher
             ->get();
 
         return $recipes
-            ->map(function (Recipe $recipe) use ($fridgeSet) {
+            ->map(function (Recipe $recipe) use ($fridgeSet, $includePantryStaples) {
                 // Реляция называется ingredientsRelation, т.к. атрибут recipes.ingredients
                 // (TEXT) уже занят человекочитаемым списком.
-                $needed = $recipe->ingredientsRelation;
+                $all = $recipe->ingredientsRelation;
+
+                // Базовые продукты (соль, масло, вода…) по умолчанию выпадают
+                // из расчёта: они есть в любой кухне, и требовать их отметить
+                // значит занижать совпадение у всех рецептов подряд.
+                $staples = $all->filter(fn (Ingredient $i) => (bool) $i->is_pantry_staple);
+                $needed = $includePantryStaples
+                    ? $all
+                    : $all->reject(fn (Ingredient $i) => (bool) $i->is_pantry_staple);
+
                 $total = $needed->count();
 
                 if ($total === 0) {
@@ -91,6 +104,11 @@ class FridgeMatcher
                         'name' => $i->name,
                         'quantity' => $i->pivot->quantity,
                     ])->values(),
+                    // Базовые продукты, которые не учитывались в расчёте:
+                    // интерфейс показывает их отдельно.
+                    'ignored_pantry_staples' => $includePantryStaples
+                        ? []
+                        : $staples->pluck('name')->values(),
                 ];
             })
             ->filter()

@@ -5,8 +5,8 @@ namespace Database\Seeders;
 use App\Models\Ingredient;
 use App\Models\Recipe;
 use App\Services\IngredientParser;
+use App\Services\PantryStaples;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Str;
 
 class IngredientSeeder extends Seeder
 {
@@ -29,5 +29,42 @@ class IngredientSeeder extends Seeder
                 ]);
             }
         });
+
+        $this->markPantryStaples();
+    }
+
+    /**
+     * Помечает базовые продукты: соль, перец, масло, сахар, мука, воду.
+     *
+     * Флаг ставится по названию продукта, а не «по первому попавшемуся»:
+     * соль и перец молотый есть почти в каждом рецепте, а вот перец
+     * болгарский — обычный овощ, и базовым продуктом он не является.
+     */
+    private function markPantryStaples(): void
+    {
+        $staples = new PantryStaples();
+
+        $stapleIds = [];
+        $total = 0;
+
+        Ingredient::query()->each(function (Ingredient $ingredient) use ($staples, &$stapleIds, &$total) {
+            $total++;
+            $isStaple = $staples->isStaple($ingredient->name);
+
+            if ($isStaple) {
+                $stapleIds[] = $ingredient->id;
+            }
+
+            if ((bool) $ingredient->is_pantry_staple !== $isStaple) {
+                $ingredient->is_pantry_staple = $isStaple;
+                $ingredient->save();
+            }
+        });
+
+        $this->command?->info(sprintf(
+            'IngredientSeeder: базовых продуктов — %d из %d (соль, перец, масло, сахар, мука, вода).',
+            count($stapleIds),
+            $total
+        ));
     }
 }
