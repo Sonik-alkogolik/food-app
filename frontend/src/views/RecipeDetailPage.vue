@@ -25,7 +25,7 @@
 
         <ul class="facts">
           <li>⏱️ Время: <b>{{ recipe.cook_time_minutes }} мин</b></li>
-          <li>🍽️ Порции: <b>{{ recipe.servings }}</b></li>
+          <li>🍽️ Порции: <b>{{ servings }}</b></li>
           <li>📊 Сложность: <b :class="recipe.difficulty">{{ diffLabel }}</b></li>
           <li>🔥 Калории: <b>{{ recipe.calories_per_serving }} ккал/порция</b></li>
           <li>👁️ Просмотры: <b>{{ recipe.views_count }}</b></li>
@@ -64,8 +64,20 @@
     <!-- Ингредиенты с чекбоксами -->
     <section class="section">
       <h2>🧺 Ингредиенты <small>(отмечайте то, что уже есть)</small></h2>
+
+      <!-- Порции: пересчёт количеств на клиенте, без запроса к серверу -->
+      <div class="servings">
+        <span class="servings-label">Порции:</span>
+        <button type="button" class="serv-btn" @click="changeServings(-1)" :disabled="servings <= 1" aria-label="Меньше порций">−</button>
+        <b class="serv-value">{{ servings }}</b>
+        <button type="button" class="serv-btn" @click="changeServings(1)" :disabled="servings >= MAX_SERVINGS" aria-label="Больше порций">+</button>
+        <button v-if="servings !== baseServings" type="button" class="serv-reset" @click="servings = baseServings">
+          Сбросить ({{ baseServings }})
+        </button>
+      </div>
+
       <ul class="ingr">
-        <li v-for="(ing, i) in recipe.ingredients_list" :key="i">
+        <li v-for="(ing, i) in scaledIngredients" :key="i">
           <label>
             <input type="checkbox" v-model="checked[i]" />
             <span :class="{ done: checked[i] }">{{ ing }}</span>
@@ -130,6 +142,7 @@ import FavoriteButton from '../components/FavoriteButton.vue'
 import CommentsSection from '../components/CommentsSection.vue'
 import RecipeResults from '../components/RecipeResults.vue'
 import { useCookingMode } from '../composables/useCookingMode'
+import { scaleIngredients } from '../utils/ingredients'
 
 const store = useRecipeStore()
 const route = useRoute()
@@ -139,10 +152,28 @@ const { active: cookingActive, toggle: toggleCookingMode } = useCookingMode()
 const checked = ref([])
 const zoom = ref(false)
 const copied = ref(false)
+const servings = ref(1)
+
+// Больше 50 порций никто не готовит, а бесконечный счётчик мешал бы.
+const MAX_SERVINGS = 50
 
 const recipe = computed(() => store.currentRecipe)
 const diffLabel = computed(() => ({ easy: 'Легко', medium: 'Средне', hard: 'Сложно' }[recipe.value?.difficulty] || ''))
 const haveCount = computed(() => checked.value.filter(Boolean).length)
+
+// Порции, на которые рассчитан рецепт, и пересчитанные под выбранное
+// число количества. Всё считается на клиенте: сервер отдаёт рецепт как есть.
+const baseServings = computed(() => Number(recipe.value?.servings) || 1)
+const scaledIngredients = computed(() => {
+  const list = recipe.value?.ingredients_list || []
+  return scaleIngredients(list, servings.value / baseServings.value)
+})
+
+function changeServings(delta) {
+  const next = servings.value + delta
+  if (next < 1 || next > MAX_SERVINGS) return
+  servings.value = next
+}
 
 /**
  * Адрес видео для встраивания в плеер.
@@ -217,6 +248,8 @@ async function load(slug) {
   zoom.value = false
   checked.value = []
   try { await store.fetchRecipeBySlug(slug) } catch { /* 404 обработан стором */ }
+  // Новый рецепт — прежнее число порций не подходит.
+  servings.value = Number(store.currentRecipe?.servings) || 1
 }
 
 onMounted(() => load(route.params.slug))
@@ -249,6 +282,16 @@ watch(() => route.params.slug, (s) => s && load(s))
 .video-link:hover { text-decoration: underline; }
 .section small { color: #999; font-weight: normal; }
 .ingr { list-style: none; padding: 0; columns: 2; }
+.servings { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.servings-label { color: #555; font-weight: 600; }
+.serv-btn {
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid #ddd; background: #fff;
+  font-size: 1.2rem; line-height: 1; cursor: pointer; color: #333;
+}
+.serv-btn:hover:not(:disabled) { border-color: #ff9800; color: #e65100; }
+.serv-btn:disabled { opacity: .4; cursor: default; }
+.serv-value { min-width: 30px; text-align: center; font-size: 1.2rem; }
+.serv-reset { border: none; background: none; color: #ff9800; font: inherit; font-size: .9rem; cursor: pointer; text-decoration: underline; }
 .ingr label { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; cursor: pointer; }
 .ingr .done { text-decoration: line-through; color: #aaa; }
 .have { color: #666; margin-top: 10px; }
