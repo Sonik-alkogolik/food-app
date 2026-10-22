@@ -10,11 +10,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * ImageUrlSeeder ставит placeholder-фото ТОЛЬКО там, где реального фото нет.
+ * ImageUrlSeeder подставляет настоящие фотографии блюд.
  *
  * Регрессия: сидер затирал настоящие фотографии рецептов из интернета
  * картинками picsum.photos, из-за чего в каталоге у всех блюд были
- * случайные картинки (лес, горы, море вместо еды).
+ * случайные картинки (лес, горы, море вместо еды), а в карточке
+ * «Яичница праздничная» — фотография машины.
  */
 class ImageUrlSeederTest extends TestCase
 {
@@ -45,14 +46,38 @@ class ImageUrlSeederTest extends TestCase
         $this->assertSame(
             'https://www.themealdb.com/images/media/meals/wvpsxx1468256321.jpg',
             $recipe->fresh()->main_image_url,
-            'Настоящее фото рецепта не должно затираться placeholder-ом'
+            'Настоящее фото рецепта не должно затираться'
         );
     }
 
-    public function test_fills_placeholder_for_recipe_without_photo(): void
+    public function test_sets_dish_photo_by_title(): void
     {
         $cat = $this->makeCategory();
 
+        $recipe = Recipe::create([
+            'category_id' => $cat->id,
+            'title' => 'Яичница праздничная',
+            'slug' => 'yaichnitsa-prazdnichnaya',
+            'ingredients' => 'Яйца — 4 шт',
+            'instructions' => '1. Пожарить',
+            'cook_time_minutes' => 15,
+            'main_image_url' => null,
+            'is_active' => true,
+        ]);
+
+        $this->seed(ImageUrlSeeder::class);
+
+        $url = (string) $recipe->fresh()->main_image_url;
+
+        $this->assertStringStartsWith('https://www.themealdb.com/', $url, 'У блюда должно быть своё фото');
+        $this->assertStringNotContainsString('picsum.photos', $url);
+    }
+
+    public function test_replaces_placeholder_photo_with_real_one(): void
+    {
+        $cat = $this->makeCategory();
+
+        // picsum — это как раз тот сервис, из которого приходили машины.
         $recipe = Recipe::create([
             'category_id' => $cat->id,
             'title' => 'Без фото',
@@ -60,13 +85,16 @@ class ImageUrlSeederTest extends TestCase
             'ingredients' => 'Соль',
             'instructions' => '1. Готово',
             'cook_time_minutes' => 10,
-            'main_image_url' => null,
+            'main_image_url' => 'https://picsum.photos/seed/recipe-1/800/600',
             'is_active' => true,
         ]);
 
         $this->seed(ImageUrlSeeder::class);
 
-        $this->assertStringContainsString('picsum.photos', (string) $recipe->fresh()->main_image_url);
+        $url = (string) $recipe->fresh()->main_image_url;
+
+        $this->assertStringNotContainsString('picsum.photos', $url);
+        $this->assertStringStartsWith('https://www.themealdb.com/', $url, 'Без своего блюда берём фото из категории');
     }
 
     public function test_replaces_local_storage_path_that_does_not_exist(): void
@@ -74,7 +102,7 @@ class ImageUrlSeederTest extends TestCase
         $cat = $this->makeCategory();
 
         // Путь /storage/... в БД есть, а файла на диске — нет: картинка
-        // не отобразится, значит нужен рабочий placeholder.
+        // не отобразится, значит нужна рабочая ссылка.
         $recipe = Recipe::create([
             'category_id' => $cat->id,
             'title' => 'Битый путь',
@@ -88,10 +116,13 @@ class ImageUrlSeederTest extends TestCase
 
         $this->seed(ImageUrlSeeder::class);
 
-        $this->assertStringContainsString('picsum.photos', (string) $recipe->fresh()->main_image_url);
+        $url = (string) $recipe->fresh()->main_image_url;
+
+        $this->assertStringStartsWith('https://', $url);
+        $this->assertStringNotContainsString('/storage/', $url);
     }
 
-    public function test_keeps_real_step_photo_and_fills_missing_one(): void
+    public function test_keeps_real_step_photo_and_leaves_step_without_photo_empty(): void
     {
         $cat = $this->makeCategory();
 
@@ -123,7 +154,36 @@ class ImageUrlSeederTest extends TestCase
         $this->seed(ImageUrlSeeder::class);
 
         $this->assertSame('https://example.com/step.jpg', $real->fresh()->image_url);
-        $this->assertStringContainsString('picsum.photos', (string) $empty->fresh()->image_url);
+        // Шаг без настоящего фото остаётся без картинки: машина вместо
+        // фотографии процесса — хуже, чем просто шаг текстом.
+        $this->assertNull($empty->fresh()->image_url);
+    }
+
+    public function test_replaces_placeholder_step_photo(): void
+    {
+        $cat = $this->makeCategory();
+
+        $recipe = Recipe::create([
+            'category_id' => $cat->id,
+            'title' => 'Шаги с заглушкой',
+            'slug' => 'shagi-zaglushka',
+            'ingredients' => 'Соль',
+            'instructions' => '1. Готово',
+            'cook_time_minutes' => 10,
+            'is_active' => true,
+        ]);
+
+        $step = RecipeStep::create([
+            'recipe_id' => $recipe->id,
+            'step_number' => 1,
+            'title' => 'Подготовка',
+            'description' => 'Нарезать',
+            'image_url' => 'https://picsum.photos/seed/step-1-1/640/480',
+        ]);
+
+        $this->seed(ImageUrlSeeder::class);
+
+        $this->assertNull($step->fresh()->image_url);
     }
 
     public function test_sets_theme_photo_for_category(): void

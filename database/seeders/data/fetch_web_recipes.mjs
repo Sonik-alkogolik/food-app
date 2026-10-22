@@ -28,6 +28,9 @@ import { fileURLToPath } from 'node:url'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const OUT = join(HERE, 'web_recipes.json')
 const CACHE = join(HERE, '.web_recipes_cache.json')
+// Фотографии шагов для рецептов Food.com: у них кроме обложки есть ещё
+// снимки процесса. Их использует ImageUrlSeeder.
+const STEP_IMAGES = join(HERE, 'foodcom_images.json')
 const TARGET = Number(process.argv[2] || 1100)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -333,6 +336,7 @@ function foodComToRecipe(row) {
       .filter(Boolean)
       .slice(0, 5),
     image: images[0] || '',
+    images,
     video: '',
     ingredients,
     steps: instructions.map((s) => s.trim()).filter((s) => s.length > 12),
@@ -437,6 +441,18 @@ async function main() {
 
   writeFileSync(CACHE, JSON.stringify(Object.fromEntries(translateCache)), 'utf8')
   writeFileSync(OUT, JSON.stringify(unique), 'utf8')
+
+  // Фото шагов для Food.com — отдельным файлом: сидер берёт отсюда
+  // снимки процесса, а из web_recipes.json — только обложку.
+  const stepImages = {}
+  for (const r of unique) {
+    if (r.source === 'foodcom' && Array.isArray(r.images) && r.images.length > 1) {
+      stepImages[r.sourceId] = r.images
+    }
+  }
+  writeFileSync(STEP_IMAGES, JSON.stringify(stepImages, null, 1) + '\n', 'utf8')
+  log('Фото шагов →', STEP_IMAGES, 'рецептов:', Object.keys(stepImages).length)
+
   log('Готово →', OUT)
   log('Запросов к переводу:', translateCalls, '| переведено строк:', translateItems)
   log('С видео:', unique.filter((r) => r.video).length, 'из', unique.length)
