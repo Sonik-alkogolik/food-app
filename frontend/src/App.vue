@@ -9,6 +9,7 @@
         <router-link to="/random">🎲</router-link>
         <!-- Авторизация -->
         <template v-if="auth.isAuthenticated">
+          <router-link to="/shopping-list">🛒 Покупки</router-link>
           <router-link to="/favorites">❤️ Избранное</router-link>
           <router-link to="/account" class="user-link">{{ auth.user?.name }}</router-link>
           <button class="logout" type="button" @click="logout">Выход</button>
@@ -29,6 +30,7 @@
       <router-link to="/random" @click="menuOpen = false">🎲 Случайный рецепт</router-link>
       <router-link to="/search" @click="menuOpen = false">🔍 Поиск</router-link>
       <template v-if="auth.isAuthenticated">
+        <router-link to="/shopping-list" @click="menuOpen = false">🛒 Список покупок</router-link>
         <router-link to="/favorites" @click="menuOpen = false">❤️ Избранное</router-link>
         <router-link to="/account" @click="menuOpen = false">👤 {{ auth.user?.name }}</router-link>
         <button class="logout mobile-logout" type="button" @click="logout">Выход</button>

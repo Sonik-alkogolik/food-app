@@ -69,4 +69,10 @@ class User extends Authenticatable
     {
         return $this->hasMany(Comment::class);
     }
+
+    /** Списки покупок пользователя. */
+    public function shoppingLists(): HasMany
+    {
+        return $this->hasMany(ShoppingList::class);
+    }
 }
