@@ -85,6 +85,12 @@ class Recipe extends Model
         return $this->hasMany(Comment::class);
     }
 
+    /** Фотоотчёты: как блюдо выглядит в реальности. */
+    public function results(): HasMany
+    {
+        return $this->hasMany(RecipeResult::class);
+    }
+
     /** Scope: только активные рецепты */
     public function scopeActive(Builder $query): Builder
     {

@@ -68,6 +68,25 @@ class AppServiceProvider extends ServiceProvider
                 });
         });
 
+        // Фотоотчёты гостей: 3 за 15 минут с одного адреса.
+        //
+        // Файл весит до 5 МБ и остаётся на диске навсегда, поэтому лимит
+        // у гостей такой же строгий, как у комментариев. Авторизованных
+        // он не касается — у них общий лимит на запись.
+        RateLimiter::for('guest-result', function (Request $request) {
+            if ($this->isAuthenticated($request)) {
+                return Limit::none();
+            }
+
+            return Limit::perMinutes(15, 3)
+                ->by('guest:'.$request->ip())
+                ->response(function (Request $request, array $headers) {
+                    return response()->json([
+                        'message' => 'Слишком много фотоотчётов. Попробуйте снова через 15 минут.',
+                    ], 429, $headers);
+                });
+        });
+
         // Вход — жёстче: перебор пароля должен упираться в лимит.
         RateLimiter::for('api-login', fn (Request $request) => $this->limit($request, 10, 10));
 

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\ImageUploadController;
 use App\Http\Controllers\Api\IngredientController;
 use App\Http\Controllers\Api\RecipeController;
 use App\Http\Controllers\Api\RecipeDetailController;
+use App\Http\Controllers\Api\RecipeResultController;
 use App\Http\Controllers\Api\RandomRecipeController;
 use App\Http\Controllers\Api\SearchController;
 use Illuminate\Support\Facades\Route;
@@ -78,6 +79,19 @@ Route::post('/recipes/{slug}/comments', [CommentController::class, 'store'])
     ->middleware(['auth.optional', 'throttle:api-write', 'throttle:guest-comment']);
 
 /*
+| Фотоотчёты: как блюдо выглядит в реальности. Читать может любой,
+| загружать — и гость, под своим именем. Гостей держит отдельный лимит,
+| иначе через анонимные фотографии можно было бы забить диск.
+*/
+Route::get('/recipes/{slug}/results', [RecipeResultController::class, 'index'])
+    ->where('slug', '[A-Za-z0-9\-_\d]+')
+    ->middleware(['auth.optional', 'throttle:api-read']);
+
+Route::post('/recipes/{slug}/results', [RecipeResultController::class, 'store'])
+    ->where('slug', '[A-Za-z0-9\-_\d]+')
+    ->middleware(['auth.optional', 'throttle:api-write', 'throttle:guest-result']);
+
+/*
 | Личное: избранное и удаление комментариев. Всё требует токена —
 | избранное принадлежит конкретному пользователю, а удалить комментарий
 | может только его автор или администратор.
@@ -92,6 +106,11 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:api-write');
 
     Route::delete('/comments/{id}', [CommentController::class, 'destroy'])
+        ->whereNumber('id')
+        ->middleware('throttle:api-write');
+
+    Route::delete('/recipes/{slug}/results/{id}', [RecipeResultController::class, 'destroy'])
+        ->where('slug', '[A-Za-z0-9\-_\d]+')
         ->whereNumber('id')
         ->middleware('throttle:api-write');
 });
