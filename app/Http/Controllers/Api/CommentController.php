@@ -8,14 +8,14 @@ use App\Models\Recipe;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Комментарии к рецептам.
  *
- * Чтение — публичное, запись — только для авторизованных: иначе комментарии
- * превращаются в анонимный поток мусора. Удалять комментарий может автор
- * или администратор.
+ * Читать и писать может любой: гость оставляет комментарий под своим
+ * именем. Удалять — только автор или администратор (App\Policies\CommentPolicy).
  */
 class CommentController extends Controller
 {
@@ -43,6 +43,9 @@ class CommentController extends Controller
 
     /**
      * POST /api/recipes/{slug}/comments — добавить комментарий.
+     *
+     * Гость пишет комментарий под именем (guest_name), пользователь —
+     * от своего аккаунта.
      */
     public function store(Request $request, string $slug): JsonResponse
     {
@@ -52,16 +55,30 @@ class CommentController extends Controller
             return response()->json(['message' => 'Рецепт не найден.'], 404);
         }
 
-        $data = $request->validate([
+        $user = $request->user();
+
+        $rules = [
             'body' => ['required', 'string', 'min:2', 'max:2000'],
-        ], [
+            'guest_name' => ['nullable', 'string', 'max:50'],
+        ];
+
+        if (!$user) {
+            // Гостю нечем подписаться, кроме имени. Без него комментарий
+            // остался бы анонимным, и так его и удалить нельзя.
+            $rules['guest_name'] = ['required', 'string', 'max:50'];
+        }
+
+        $data = $request->validate($rules, [
             'body.required' => 'Напишите текст комментария.',
             'body.min' => 'Комментарий слишком короткий.',
             'body.max' => 'Комментарий слишком длинный (максимум 2000 символов).',
+            'guest_name.required' => 'Напишите, как вас зовут.',
+            'guest_name.max' => 'Имя слишком длинное (максимум 50 символов).',
         ]);
 
         $comment = $recipe->comments()->create([
-            'user_id' => $request->user()->id,
+            'user_id' => $user?->id,
+            'guest_name' => $user ? null : trim((string) $data['guest_name']),
             'body' => $data['body'],
         ]);
 
@@ -70,7 +87,7 @@ class CommentController extends Controller
         return response()->json([
             'message' => 'Комментарий добавлен.',
             'data' => [
-                'comment' => $this->commentPayload($comment->load('user:id,name'), $request->user()),
+                'comment' => $this->commentPayload($comment->load('user:id,name'), $user),
             ],
         ], 201);
     }
@@ -86,7 +103,7 @@ class CommentController extends Controller
             return response()->json(['message' => 'Комментарий не найден.'], 404);
         }
 
-        if (!$comment->canBeDeletedBy($request->user())) {
+        if (!Gate::forUser($request->user())->allows('delete', $comment)) {
             return response()->json([
                 'message' => 'Удалить комментарий может только его автор или администратор.',
             ], 403);
@@ -124,9 +141,10 @@ class CommentController extends Controller
             'created_at' => $comment->created_at?->toIso8601String(),
             'user' => [
                 'id' => $comment->user?->id,
-                'name' => $comment->user?->name ?? 'Аноним',
+                'name' => $comment->authorName(),
             ],
-            'can_delete' => $comment->canBeDeletedBy($user),
+            'is_guest' => $comment->isGuest(),
+            'can_delete' => Gate::forUser($user)->allows('delete', $comment),
         ];
     }
 }

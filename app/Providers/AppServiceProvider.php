@@ -48,6 +48,26 @@ class AppServiceProvider extends ServiceProvider
         // Запись: загрузка изображений, избранное, комментарии, смена пароля.
         RateLimiter::for('api-write', fn (Request $request) => $this->limit($request, 20, 60));
 
+        // Комментарии гостей: 3 за 15 минут с одного адреса.
+        //
+        // Гость пишет под именем, и удалить свой комментарий он не может —
+        // поэтому завалить рецепт анонимными записями можно было бы легко.
+        // Авторизованных этот лимит не касается: у них свой общий лимит
+        // на запись.
+        RateLimiter::for('guest-comment', function (Request $request) {
+            if ($this->isAuthenticated($request)) {
+                return Limit::none();
+            }
+
+            return Limit::perMinutes(15, 3)
+                ->by('guest:'.$request->ip())
+                ->response(function (Request $request, array $headers) {
+                    return response()->json([
+                        'message' => 'Слишком много комментариев. Попробуйте снова через 15 минут.',
+                    ], 429, $headers);
+                });
+        });
+
         // Вход — жёстче: перебор пароля должен упираться в лимит.
         RateLimiter::for('api-login', fn (Request $request) => $this->limit($request, 10, 10));
 
@@ -56,6 +76,24 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api-register', fn (Request $request) => $this->limit($request, 5, 20));
 
         RateLimiter::for('api-reset', fn (Request $request) => $this->limit($request, 5, 20));
+    }
+
+    /**
+     * Авторизован ли запрос.
+     *
+     * Проверяем токен сами, а не через $request->user(): middleware
+     * ограничения частоты выполняются раньше middleware авторизации
+     * (так устроена очередь middleware в Laravel), и на момент проверки
+     * пользователь ещё не определён.
+     */
+    private function isAuthenticated(Request $request): bool
+    {
+        if ($request->user()) {
+            return true;
+        }
+
+        // Токен есть, но не рабочий — запрос считаем гостевым.
+        return (bool) $request->bearerToken() && auth('sanctum')->check();
     }
 
     /**
