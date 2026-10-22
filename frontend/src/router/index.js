@@ -16,6 +16,7 @@ const routes = [
   { path: '/reset-password', name: 'reset-password', component: () => import('../views/ResetPasswordPage.vue') },
   { path: '/account', name: 'account', component: () => import('../views/AccountPage.vue'), meta: { requiresAuth: true } },
   { path: '/favorites', name: 'favorites', component: () => import('../views/FavoritesPage.vue'), meta: { requiresAuth: true } },
+  { path: '/shopping-list', name: 'shopping-list', component: () => import('../views/ShoppingListPage.vue'), meta: { requiresAuth: true } },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
 

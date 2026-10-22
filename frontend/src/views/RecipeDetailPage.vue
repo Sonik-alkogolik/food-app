@@ -39,8 +39,12 @@
           <button class="btn cooking-btn" :class="{ on: cookingActive }" @click="toggleCooking">
             {{ cookingActive ? '✖️ Выйти из режима готовки' : '👨‍🍳 Готовим' }}
           </button>
+          <button class="btn shopping-btn" :disabled="addingToList" @click="addToShoppingList">
+            {{ addingToList ? 'Добавляем…' : '🛒 В список покупок' }}
+          </button>
         </div>
         <p v-if="copied" class="copied">Ссылка скопирована!</p>
+        <p v-if="shoppingNotice" class="shopping-notice">{{ shoppingNotice }}</p>
       </div>
     </div>
 
@@ -133,9 +137,11 @@
 /* ШАГ 34: детальная страница рецепта — breadcrumbs, большое фото, ингредиенты с чекбоксами,
    шаги с фото (RecipeSteps), галерея, похожие рецепты, избранное/поделиться/печать, SEO meta */
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useHead } from '@unhead/vue'
 import { useRecipeStore } from '../stores/recipes'
+import { useAuthStore } from '../stores/auth'
+import { useShoppingListStore } from '../stores/shoppingList'
 import RecipeCard from '../components/RecipeCard.vue'
 import RecipeSteps from '../components/RecipeSteps.vue'
 import FavoriteButton from '../components/FavoriteButton.vue'
@@ -146,6 +152,9 @@ import { scaleIngredients } from '../utils/ingredients'
 
 const store = useRecipeStore()
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
+const shopping = useShoppingListStore()
 // Режим готовки — общее состояние приложения, поэтому его рефы
 // разворачиваем в setup: так они корректно подставляются в шаблон.
 const { active: cookingActive, toggle: toggleCookingMode } = useCookingMode()
@@ -153,6 +162,8 @@ const checked = ref([])
 const zoom = ref(false)
 const copied = ref(false)
 const servings = ref(1)
+const addingToList = ref(false)
+const shoppingNotice = ref('')
 
 // Больше 50 порций никто не готовит, а бесконечный счётчик мешал бы.
 const MAX_SERVINGS = 50
@@ -207,6 +218,39 @@ async function toggleCooking() {
   await toggleCookingMode()
   if (cookingActive.value) {
     document.getElementById('steps')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
+
+/**
+ * Добавить ингредиенты рецепта в список покупок.
+ *
+ * Количества берутся под выбранное число порций — тот же счётчик, что
+ * и в блоке ингредиентов.
+ */
+async function addToShoppingList() {
+  if (!auth.isAuthenticated) {
+    shoppingNotice.value = 'Войдите, чтобы добавить продукты в список покупок.'
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+
+  addingToList.value = true
+  shoppingNotice.value = ''
+
+  try {
+    if (!shopping.lists.length) await shopping.fetchLists()
+    const listId = shopping.activeId || shopping.lists[0]?.id
+    if (!listId) {
+      shoppingNotice.value = 'Не удалось найти список покупок.'
+      return
+    }
+
+    const res = await shopping.addRecipeIngredients(listId, recipe.value.slug, servings.value)
+    shoppingNotice.value = res.message
+  } catch (e) {
+    shoppingNotice.value = e.response?.data?.message || 'Не удалось добавить в список покупок.'
+  } finally {
+    addingToList.value = false
   }
 }
 
@@ -274,6 +318,7 @@ watch(() => route.params.slug, (s) => s && load(s))
 .actions .btn { background: #f3f4f6; color: #333; }
 .cooking-btn.on { background: #ff9800; color: #fff; }
 .copied { color: #16a34a; font-size: .85rem; }
+.shopping-notice { color: #e65100; font-size: .9rem; margin-top: 8px; }
 .section { margin-top: 36px; }
 .section h2 { margin-bottom: 14px; }
 .video-wrap { position: relative; aspect-ratio: 16/9; border-radius: 14px; overflow: hidden; background: #000; }

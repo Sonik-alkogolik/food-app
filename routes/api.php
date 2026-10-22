@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\RecipeDetailController;
 use App\Http\Controllers\Api\RecipeResultController;
 use App\Http\Controllers\Api\RandomRecipeController;
 use App\Http\Controllers\Api\SearchController;
+use App\Http\Controllers\Api\ShoppingListController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -112,6 +113,39 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/recipes/{slug}/results/{id}', [RecipeResultController::class, 'destroy'])
         ->where('slug', '[A-Za-z0-9\-_\d]+')
         ->whereNumber('id')
+        ->middleware('throttle:api-write');
+
+    /*
+    | Список покупок — личный: он принадлежит пользователю, поэтому
+    | все маршруты требуют токен. Позиции добавляются по одной или разом
+    | («добавь ингредиенты рецепта» — одной транзакцией).
+    */
+    Route::get('/shopping-list', [ShoppingListController::class, 'index'])
+        ->middleware('throttle:api-read');
+    Route::post('/shopping-list', [ShoppingListController::class, 'store'])
+        ->middleware('throttle:api-write');
+    Route::patch('/shopping-list/{id}', [ShoppingListController::class, 'update'])
+        ->whereNumber('id')
+        ->middleware('throttle:api-write');
+    Route::delete('/shopping-list/{id}', [ShoppingListController::class, 'destroy'])
+        ->whereNumber('id')
+        ->middleware('throttle:api-write');
+
+    Route::post('/shopping-list/{id}/items', [ShoppingListController::class, 'storeItem'])
+        ->whereNumber('id')
+        ->middleware('throttle:api-write');
+    // Массовое добавление ингредиентов рецепта — маршрут без числового
+    // параметра, поэтому он должен идти раньше /items/{itemId}.
+    Route::post('/shopping-list/{id}/items/bulk', [ShoppingListController::class, 'bulkAdd'])
+        ->whereNumber('id')
+        ->middleware('throttle:api-write');
+    Route::patch('/shopping-list/{id}/items/{itemId}', [ShoppingListController::class, 'updateItem'])
+        ->whereNumber('id')
+        ->whereNumber('itemId')
+        ->middleware('throttle:api-write');
+    Route::delete('/shopping-list/{id}/items/{itemId}', [ShoppingListController::class, 'destroyItem'])
+        ->whereNumber('id')
+        ->whereNumber('itemId')
         ->middleware('throttle:api-write');
 });
 
