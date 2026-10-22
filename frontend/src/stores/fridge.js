@@ -3,6 +3,11 @@ import axios from 'axios'
 
 const LS_KEY = 'fridge-items'
 const LS_STAPLES = 'fridge-include-staples'
+const LS_MIN_MATCH = 'fridge-min-match'
+
+// Порог совпадения по умолчанию: показываем рецепты, совпавшие
+// не меньше чем на 70% — это «почти готово».
+const DEFAULT_MIN_MATCH = 70
 
 export const useFridgeStore = defineStore('fridge', {
   state: () => ({
@@ -15,6 +20,8 @@ export const useFridgeStore = defineStore('fridge', {
     // при подборе. По умолчанию нет: они есть в любой кухне, и требовать
     // их отметить значит занижать совпадение у всех рецептов подряд.
     includePantryStaples: localStorage.getItem(LS_STAPLES) === '1',
+    // Порог совпадения: какие рецепты считать подходящими.
+    minMatch: Number(localStorage.getItem(LS_MIN_MATCH) ?? DEFAULT_MIN_MATCH),
     // Номер последнего отправленного запроса: ответ с меньшим номером
     // считается устаревшим и игнорируется.
     requestId: 0,
@@ -34,6 +41,11 @@ export const useFridgeStore = defineStore('fridge', {
     setIncludePantryStaples(value) {
       this.includePantryStaples = !!value
       localStorage.setItem(LS_STAPLES, this.includePantryStaples ? '1' : '0')
+      this.search()
+    },
+    setMinMatch(value) {
+      this.minMatch = Number(value)
+      localStorage.setItem(LS_MIN_MATCH, String(this.minMatch))
       this.search()
     },
     addItem(name) {
@@ -79,6 +91,7 @@ export const useFridgeStore = defineStore('fridge', {
         const res = await axios.post('/api/fridge/match', {
           ingredients: this.items,
           include_pantry_staples: this.includePantryStaples,
+          min_match: this.minMatch,
         })
         if (requestId !== this.requestId) return
         this.matches = res.data.recipes

@@ -21,6 +21,16 @@ class FridgeMatcher
     ];
 
     /**
+     * Порог совпадения по умолчанию.
+     *
+     * Рецепт, у которого совпало 70% продуктов, — это «почти готово»:
+     * не хватает пары продуктов, и до кухни не надо идти за одним
+     * недостающим. Рецепты с совпадением ниже порога в выдачу не
+     * попадают: они больше похожи на совпадение случайное.
+     */
+    public const DEFAULT_MIN_MATCH = 70;
+
+    /**
      * Подбирает рецепты по списку ингредиентов пользователя.
      *
      * @param  array<int,string> $fridgeNames
@@ -28,10 +38,14 @@ class FridgeMatcher
      *                                       (соль, перец, масло, сахар, мука,
      *                                       вода) недостающими. По умолчанию
      *                                       нет: они есть в любой кухне.
+     * @param  int  $minMatch  Минимальный процент совпадения (0–100).
      * @return Collection<int,array>
      */
-    public function match(array $fridgeNames, bool $includePantryStaples = false): Collection
-    {
+    public function match(
+        array $fridgeNames,
+        bool $includePantryStaples = false,
+        int $minMatch = self::DEFAULT_MIN_MATCH
+    ): Collection {
         $fridgeSlugs = collect($fridgeNames)
             ->map(fn ($n) => Slug::make((string) $n))
             ->filter()
@@ -62,7 +76,7 @@ class FridgeMatcher
             ->get();
 
         return $recipes
-            ->map(function (Recipe $recipe) use ($fridgeSet, $includePantryStaples) {
+            ->map(function (Recipe $recipe) use ($fridgeSet, $includePantryStaples, $minMatch) {
                 // Реляция называется ingredientsRelation, т.к. атрибут recipes.ingredients
                 // (TEXT) уже занят человекочитаемым списком.
                 $all = $recipe->ingredientsRelation;
@@ -85,6 +99,11 @@ class FridgeMatcher
                 $missing = $needed->reject(fn (Ingredient $i) => isset($fridgeSet[$i->slug]));
                 $percent = (int) round($matched->count() / $total * 100);
 
+                // Ниже порога — не «почти готово», а случайное совпадение.
+                if ($percent < $minMatch) {
+                    return null;
+                }
+
                 return [
                     'id' => $recipe->id,
                     'title' => $recipe->title,
@@ -93,8 +112,12 @@ class FridgeMatcher
                     'cook_time_minutes' => $recipe->cook_time_minutes,
                     'instructions' => $recipe->instructions,
                     'main_image_url' => $recipe->main_image_url,
-                    'match_percent' => $percent,
+                    'match_percentage' => $percent,
                     'can_cook' => $missing->isEmpty(),
+                    // Сколько продуктов нашлось и сколько нужно всего:
+                    // интерфейс показывает «Есть X из Y продуктов».
+                    'matched_count' => $matched->count(),
+                    'total_count' => $total,
                     'matched_ingredients' => $matched->pluck('name')->values(),
                     'missing_ingredients' => $missing->map(fn (Ingredient $i) => [
                         'name' => $i->name,
@@ -113,7 +136,7 @@ class FridgeMatcher
             })
             ->filter()
             ->sortBy([
-                ['match_percent', 'desc'],
+                ['match_percentage', 'desc'],
                 ['cook_time_minutes', 'asc'],
             ])
             ->take(20)
