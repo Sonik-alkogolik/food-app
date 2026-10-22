@@ -48,7 +48,7 @@ class FridgeMatchTest extends TestCase
         $this->makeRecipe('Омлет', ['Яйца', 'Молоко']);
         $res = $this->postJson('/api/fridge/match', ['ingredients' => ['яйца', 'МОЛОКО']]);
         $res->assertOk()->assertJsonPath('recipes.0.can_cook', true);
-        $res->assertJsonPath('recipes.0.match_percent', 100);
+        $res->assertJsonPath('recipes.0.match_percentage', 100);
         $res->assertJsonPath('recipes.0.missing_ingredients', []);
     }
 
@@ -56,10 +56,13 @@ class FridgeMatchTest extends TestCase
     {
         $this->makeRecipe('Плов', ['Рис', 'Морковь', 'Лук', 'Мясо']);
         $this->makeRecipe('Салат', ['Рис', 'Огурец']);
-        $res = $this->postJson('/api/fridge/match', ['ingredients' => ['рис', 'морковь']]);
+        $res = $this->postJson('/api/fridge/match', [
+            'ingredients' => ['рис', 'морковь'],
+            'min_match' => 0,
+        ]);
         $res->assertOk()->assertJsonPath('recipes.0.title', 'Плов'); // 50% > 33%? Плов 2/4=50, Салат 1/2=50 — по времени одинаково
         $first = $res->json('recipes.0');
-        $this->assertSame(50, $first['match_percent']);
+        $this->assertSame(50, $first['match_percentage']);
         $this->assertFalse($first['can_cook']);
         $names = array_column($first['missing_ingredients'], 'name');
         $this->assertContains('Лук', $names);
@@ -106,7 +109,10 @@ class FridgeMatchTest extends TestCase
         $this->makeRecipe('Пирог с луком', ['Лук репчатый', 'Мука']);
         $this->makeRecipe('Салат с луком', ['Красный лук', 'Помидоры']);
 
-        $res = $this->postJson('/api/fridge/match', ['ingredients' => ['лук']]);
+        $res = $this->postJson('/api/fridge/match', [
+            'ingredients' => ['лук'],
+            'min_match' => 0,
+        ]);
 
         $res->assertOk()->assertJsonPath('count', 2);
 

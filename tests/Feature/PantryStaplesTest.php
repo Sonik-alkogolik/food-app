@@ -116,7 +116,7 @@ class PantryStaplesTest extends TestCase
         $res = $this->postJson('/api/fridge/match', ['ingredients' => ['яйца']]);
 
         $res->assertOk()->assertJsonPath('count', 1);
-        $res->assertJsonPath('recipes.0.match_percent', 100);
+        $res->assertJsonPath('recipes.0.match_percentage', 100);
         $res->assertJsonPath('recipes.0.can_cook', true);
         $res->assertJsonPath('recipes.0.missing_ingredients', []);
 
@@ -134,10 +134,11 @@ class PantryStaplesTest extends TestCase
         $res = $this->postJson('/api/fridge/match', [
             'ingredients' => ['яйца'],
             'include_pantry_staples' => true,
+            'min_match' => 0,
         ]);
 
         $res->assertOk()->assertJsonPath('include_pantry_staples', true);
-        $res->assertJsonPath('recipes.0.match_percent', 33);
+        $res->assertJsonPath('recipes.0.match_percentage', 33);
         $res->assertJsonPath('recipes.0.can_cook', false);
 
         $missing = array_column($res->json('recipes.0.missing_ingredients'), 'name');

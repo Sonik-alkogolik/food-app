@@ -33,6 +33,21 @@
       <button class="clear" @click="store.clear()">Очистить всё</button>
     </div>
 
+    <!-- Порог совпадения: какие рецепты считать подходящими -->
+    <div class="match-filter">
+      <label for="min-match">Совпадение не ниже</label>
+      <select
+        id="min-match"
+        :value="store.minMatch"
+        @change="store.setMinMatch($event.target.value)"
+      >
+        <option value="100">100% — можно готовить</option>
+        <option value="70">70% — почти готово</option>
+        <option value="50">50% — половина есть</option>
+        <option value="0">Любое совпадение</option>
+      </select>
+    </div>
+
     <!-- Базовые продукты: их не нужно искать в холодильнике -->
     <section class="staples" v-if="store.pantryStaples.length">
       <label class="staple-toggle">
@@ -73,7 +88,7 @@
 
     <div v-if="store.loading" class="status">Ищем рецепты…</div>
     <div v-else-if="store.searched && store.matches.length === 0" class="status empty">
-      😕 Подходящих блюд не найдено. Попробуйте добавить ещё ингредиентов (мука, масло, рис…).
+      😕 Подходящих блюд не найдено. Попробуйте снизить порог совпадения или добавить ещё ингредиентов (мука, масло, рис…).
     </div>
 
     <div class="grid">
@@ -87,15 +102,15 @@
         <div class="top">
           <h3>{{ recipe.title }}</h3>
           <span class="badge" :class="recipe.can_cook ? 'ok' : 'partial'">
-            {{ recipe.can_cook ? '✅ Можно готовить!' : recipe.match_percent + '% совпадение' }}
+            {{ recipe.can_cook ? '✅ Можно готовить!' : recipe.match_percentage + '% совпадение' }}
           </span>
         </div>
         <p class="meta">📂 {{ recipe.category }} · ⏱️ {{ recipe.cook_time_minutes }} мин.</p>
-        <p class="matched" v-if="recipe.matched_ingredients.length">
-          Есть: {{ recipe.matched_ingredients.join(', ') }}
-        </p>
-        <p class="missing" v-if="recipe.missing_ingredients.length">
-          Не хватает: {{ recipe.missing_ingredients.map(m => m.name).join(', ') }}
+        <p class="match-summary">
+          Есть {{ recipe.matched_count }} из {{ recipe.total_count }} продуктов<span
+            v-if="recipe.missing_ingredients.length"
+            class="missing"
+          >. Не хватает: {{ recipe.missing_ingredients.map(m => m.name).join(', ') }}</span>
         </p>
         <p class="ignored" v-if="recipe.ignored_pantry_staples && recipe.ignored_pantry_staples.length">
           🧂 Базовые продукты не учитываются: {{ recipe.ignored_pantry_staples.join(', ') }}
@@ -109,7 +124,7 @@
       <div class="modal">
         <button class="close" @click="selected = null">×</button>
         <h2>{{ selected.title }}</h2>
-        <p class="meta">📂 {{ selected.category }} · ⏱️ {{ selected.cook_time_minutes }} мин. · Совпадение: {{ selected.match_percent }}%</p>
+        <p class="meta">📂 {{ selected.category }} · ⏱️ {{ selected.cook_time_minutes }} мин. · Совпадение: {{ selected.match_percentage }}%</p>
         <h4>Ингредиенты</h4>
         <ul>
           <li v-for="ing in selected.all_ingredients" :key="ing.name" :class="{ have: isHave(ing.name) }">
@@ -201,8 +216,11 @@ onMounted(() => {
 .badge.ok { background: #2e9e2e; color: #fff; }
 .badge.partial { background: #ffcc80; color: #6b4a00; }
 .meta { color: #777; font-size: .9em; }
-.matched { color: #2e7d32; font-size: .9em; }
-.missing { color: #c62828; font-size: .9em; }
+.match-summary { color: #2e7d32; font-size: .9em; }
+.match-summary .missing { color: #c62828; }
+.match-filter { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; color: #666; font-size: .9em; }
+.match-filter select { padding: 7px 10px; border: 2px solid #ddd; border-radius: 10px; font-size: .95em; background: #fff; color: #333; }
+.match-filter select:focus { border-color: #ff9800; outline: none; }
 .more { margin-top: 8px; border: none; background: none; color: #ff9800; cursor: pointer; font-size: .95em; padding: 0; }
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50; }
 .modal { background: #fff; border-radius: 16px; padding: 26px; max-width: 640px; width: 100%; max-height: 85vh; overflow-y: auto; position: relative; }
