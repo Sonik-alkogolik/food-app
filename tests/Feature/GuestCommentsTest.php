@@ -196,6 +196,26 @@ class GuestCommentsTest extends TestCase
         }
     }
 
+    /**
+     * Мусорные байты в тексте не должны ломать ответ: клиент с битой
+     * кодировкой получал бы 500 вместо комментария.
+     *
+     * Формой, а не JSON: в JSON такие байты не разбираются вовсе, и запрос
+     * просто остаётся без данных (это отдельный случай, ответ 422).
+     */
+    public function test_invalid_utf8_in_body_does_not_break_the_request(): void
+    {
+        $recipe = $this->makeRecipe();
+
+        $res = $this->post('/api/recipes/' . $recipe->slug . '/comments', [
+            'body' => "Вкусно\xC3\x28",
+            'guest_name' => 'Маша',
+        ], ['Accept' => 'application/json']);
+
+        $res->assertStatus(201);
+        $this->assertTrue(mb_check_encoding(Comment::first()->body, 'UTF-8'));
+    }
+
     public function test_comment_keeps_its_author_after_user_deletion(): void
     {
         $recipe = $this->makeRecipe();

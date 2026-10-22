@@ -93,6 +93,11 @@
       </div>
     </section>
 
+    <!-- Фотоотчёты: как блюдо выглядит в реальности -->
+    <section class="section">
+      <RecipeResults :recipe="recipe" />
+    </section>
+
     <!-- Похожие рецепты -->
     <section class="section" v-if="recipe.similar?.length">
       <h2>💡 Похожие рецепты</h2>
@@ -120,6 +125,7 @@ import RecipeCard from '../components/RecipeCard.vue'
 import RecipeSteps from '../components/RecipeSteps.vue'
 import FavoriteButton from '../components/FavoriteButton.vue'
 import CommentsSection from '../components/CommentsSection.vue'
+import RecipeResults from '../components/RecipeResults.vue'
 
 const store = useRecipeStore()
 const route = useRoute()

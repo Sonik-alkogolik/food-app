@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Comment;
 use App\Models\Recipe;
 use App\Models\User;
+use App\Support\Utf8;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -56,6 +57,13 @@ class CommentController extends Controller
         }
 
         $user = $request->user();
+
+        // Текст чистим до проверки: мусорные байты в тексте или имени
+        // иначе ломали бы ответ на 500.
+        $request->merge([
+            'body' => Utf8::clean($request->input('body')),
+            'guest_name' => Utf8::clean($request->input('guest_name')),
+        ]);
 
         $rules = [
             'body' => ['required', 'string', 'min:2', 'max:2000'],
