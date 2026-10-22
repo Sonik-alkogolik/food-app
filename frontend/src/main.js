@@ -34,3 +34,14 @@ setUnauthorizedHandler(() => {
 
 app.use(router)
 app.mount('#app')
+
+// Service worker: приложение ставится на домашний экран и работает без сети.
+// В dev-режиме его нет — иначе каждый перезапуск сборки отдавал бы
+// браузеру старые файлы из кеша.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {
+      // Без service worker приложение всё равно работает — просто без офлайна.
+    })
+  })
+}
